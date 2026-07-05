@@ -733,12 +733,13 @@ export default function App() {
         if (disposed) return;
 
         setIsWindowMaximized(maximized);
-        invoke("settings_set", {
-          key: "app.wasMaximized",
-          value: String(maximized),
-        }).catch(() => {});
-
-        if (!isMac) return;
+        if (!isMac) {
+          invoke("settings_set", {
+            key: "app.wasMaximized",
+            value: String(maximized),
+          }).catch(() => {});
+          return;
+        }
 
         const [monitor, outerPos, outerSize] = await Promise.all([
           currentMonitor(),
@@ -756,6 +757,11 @@ export default function App() {
           Math.abs(outerSize.height - workArea.size.height) <= tolerance;
         const expanded =
           Date.now() < macSuppressExpandedUntilRef.current ? false : rawExpanded;
+
+        invoke("settings_set", {
+          key: "app.wasMaximized",
+          value: String(maximized || expanded),
+        }).catch(() => {});
 
         const wasExpanded = macExpandedRef.current;
         setMacExpandedStable(expanded);
