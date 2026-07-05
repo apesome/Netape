@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize } from "@tauri-apps/api/dpi";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { windowReady } from "./windowInit";
@@ -372,6 +372,8 @@ export default function App() {
   const t = useT();
   const appWindow = getCurrentWindow();
   const isMac = /mac/i.test(navigator.platform || navigator.userAgent || "");
+  const macRestoreInFlightRef = useRef(false);
+  const macExpandedRef = useRef(false);
 
   // Tab bar — refs & state (effects registered after activeId below)
   const tabsScrollRef   = useRef<HTMLDivElement>(null);
@@ -701,33 +703,93 @@ export default function App() {
   useEffect(() => {
     const win = getCurrentWindow();
     let ready = false;
-    const syncExpandedState = () => {
-      const expanded =
-        window.screenX <= 2 &&
-        window.screenY <= 2 &&
-        window.outerWidth >= window.screen.availWidth - 4;
-      setIsMacWindowExpanded(expanded);
+    let disposed = false;
+    const unlistenFns: Array<() => void> = [];
+
+    const syncWindowChromeState = async () => {
+      try {
+        const maximized = await win.isMaximized();
+        if (disposed) return;
+
+        setIsWindowMaximized(maximized);
+        invoke("settings_set", { key: "app.wasMaximized", value: String(maximized) }).catch(() => {});
+
+        if (!isMac) return;
+
+        const [monitor, outerPos, outerSize] = await Promise.all([
+          currentMonitor(),
+          win.outerPosition(),
+          win.outerSize(),
+        ]);
+        if (disposed) return;
+
+        const workArea = monitor?.workArea;
+        const tolerance = 14;
+        const expanded = !!workArea &&
+          Math.abs(outerPos.x - workArea.position.x) <= tolerance &&
+          Math.abs(outerPos.y - workArea.position.y) <= tolerance &&
+          Math.abs(outerSize.width - workArea.size.width) <= tolerance &&
+          Math.abs(outerSize.height - workArea.size.height) <= tolerance;
+
+        setIsMacWindowExpanded(expanded);
+
+        const wasExpanded = macExpandedRef.current;
+        macExpandedRef.current = expanded;
+
+        if (
+          wasExpanded &&
+          !expanded &&
+          !maximized &&
+          !macRestoreInFlightRef.current
+        ) {
+          macRestoreInFlightRef.current = true;
+          try {
+            await win.setSize(new LogicalSize(1024, 720));
+            await win.center();
+          } catch {
+            // Ignore restore failures and keep the current bounds.
+          } finally {
+            window.setTimeout(() => {
+              macRestoreInFlightRef.current = false;
+              void syncWindowChromeState();
+            }, 120);
+          }
+        }
+      } catch {
+        // Ignore window state sync errors.
+      }
     };
-    windowReady.finally(() => {
+
+    windowReady.finally(async () => {
       ready = true;
-      // Initialize icon state once the window is in its final position
-      win.isMaximized().then(setIsWindowMaximized).catch(() => {});
-      syncExpandedState();
+      await syncWindowChromeState();
       // Restore host tree expanded state from DB
       void loadTreeExpanded();
-    });
+      unlistenFns.push(await win.onResized(() => {
+        if (!ready || disposed) return;
+        void syncWindowChromeState();
+      }));
+      unlistenFns.push(await win.onMoved(() => {
+        if (!ready || disposed) return;
+        void syncWindowChromeState();
+      }));
+      unlistenFns.push(await win.onScaleChanged(() => {
+        if (!ready || disposed) return;
+        void syncWindowChromeState();
+      }));
+    }).catch(() => {});
 
     const onResize = () => {
       if (!ready) return;
-      syncExpandedState();
-      win.isMaximized().then(v => {
-        invoke("settings_set", { key: "app.wasMaximized", value: String(v) }).catch(() => {});
-        setIsWindowMaximized(v);
-      }).catch(() => {});
+      void syncWindowChromeState();
     };
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
+    return () => {
+      disposed = true;
+      window.removeEventListener("resize", onResize);
+      for (const unlisten of unlistenFns) unlisten();
+    };
+  }, [isMac]);
 
   // Fade out the loading screen once React has mounted and window state is restored.
   useEffect(() => {
