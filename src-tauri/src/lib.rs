@@ -21,6 +21,8 @@ mod terminal;
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuBuilder, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+#[cfg(target_os = "macos")]
+use tauri::TitleBarStyle;
 use tauri::{AppHandle, Manager, Runtime};
 
 const TRAY_ID: &str = "main-tray";
@@ -134,6 +136,11 @@ pub fn run() {
             sftp::init(&app.handle());
             plugin::init(&app.handle());
 
+            #[cfg(target_os = "macos")]
+            {
+                let _ = app.remove_menu();
+            }
+
             let app_state = app_state::AppState::init(&app.handle())
                 .expect("failed to open app store");
 
@@ -141,6 +148,11 @@ pub fn run() {
             // phase (especially in dev mode) appears centered on screen.
             // JS windowInit.ts may later restore a saved position before show().
             if let Some(win) = app.get_webview_window("main") {
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = win.set_decorations(true);
+                    let _ = win.set_title_bar_style(TitleBarStyle::Overlay);
+                }
                 let _ = win.center();
             }
 

@@ -1811,29 +1811,9 @@ export default function App() {
             ))}
           </div>
 
-          {/* Window controls (replaces OS titlebar) */}
-          <div className={`winctrls${isMac ? " winctrls--macos" : ""}`}>
-            {isMac ? (
-              <>
-                <button className="wctrl wctrl-close" onMouseDown={(e) => e.stopPropagation()} onClick={handleWindowClose} data-tooltip={t("app.window.close")}>
-                  <span className="wctrl-dot" />
-                </button>
-                <button className="wctrl wctrl-min" onMouseDown={(e) => e.stopPropagation()} onClick={() => appWindow.minimize()} data-tooltip={t("app.window.minimize")}>
-                  <span className="wctrl-dot" />
-                </button>
-                <button className="wctrl wctrl-max" onMouseDown={(e) => e.stopPropagation()} onClick={async () => {
-                  if (isWindowMaximized) {
-                    await appWindow.unmaximize();
-                    await appWindow.setSize(new LogicalSize(1024, 720));
-                    await appWindow.center();
-                  } else {
-                    await appWindow.maximize();
-                  }
-                }} data-tooltip={isWindowMaximized ? t("app.window.restore") : t("app.window.maximize")}>
-                  <span className="wctrl-dot" />
-                </button>
-              </>
-            ) : (
+          {/* Window controls (Windows/Linux custom titlebar only) */}
+          {!isMac && (
+            <div className="winctrls">
               <>
                 <button className="wctrl wctrl-min" onMouseDown={(e) => e.stopPropagation()} onClick={() => appWindow.minimize()} data-tooltip={t("app.window.minimize")}>
                   <WcMin />
@@ -1853,8 +1833,8 @@ export default function App() {
                   <WcClose />
                 </button>
               </>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* ── Content ─────────────────────────────────────────── */}
