@@ -842,7 +842,11 @@ html, body, #root {
   padding-left: 76px;
 }
 
-.tabbar--macos.tabbar--fence {
+.tabbar--macos.tabbar--maximized {
+  padding-left: 0;
+}
+
+.tabbar--macos.tabbar--fence:not(.tabbar--sidebar-collapsed) {
   padding-left: 0;
 }
 

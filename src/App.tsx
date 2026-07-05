@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize } from "@tauri-apps/api/dpi";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { windowReady } from "./windowInit";
 import { loadTreeExpanded } from "./store/treeStore";
 
@@ -57,6 +58,74 @@ const SFTP_PIN_ID = "sftp-pinned";
 
 const translatedTabTitle = (tab: Tab, translate: typeof import("./i18n").t) =>
   tab.titleKey ? translate(tab.titleKey) : tab.title;
+
+const dispatchInputEvent = (el: HTMLInputElement | HTMLTextAreaElement) => {
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+};
+
+const handleEditableShortcut = async (e: KeyboardEvent, target: HTMLElement) => {
+  const key = e.key.toLowerCase();
+  const isInput =
+    target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+
+  if ((e.metaKey || e.ctrlKey) && key === "a") {
+    e.preventDefault();
+    if (isInput) target.select();
+    else document.execCommand("selectAll");
+    return;
+  }
+
+  if ((e.metaKey || e.ctrlKey) && key === "c") {
+    e.preventDefault();
+    if (isInput) {
+      const start = target.selectionStart ?? 0;
+      const end = target.selectionEnd ?? start;
+      await writeText(target.value.slice(start, end));
+    } else {
+      document.execCommand("copy");
+    }
+    return;
+  }
+
+  if ((e.metaKey || e.ctrlKey) && key === "x") {
+    e.preventDefault();
+    if (isInput) {
+      const start = target.selectionStart ?? 0;
+      const end = target.selectionEnd ?? start;
+      await writeText(target.value.slice(start, end));
+      target.setRangeText("", start, end, "start");
+      dispatchInputEvent(target);
+    } else {
+      document.execCommand("cut");
+    }
+    return;
+  }
+
+  if ((e.metaKey || e.ctrlKey) && key === "v") {
+    e.preventDefault();
+    if (isInput) {
+      const text = await readText();
+      const start = target.selectionStart ?? 0;
+      const end = target.selectionEnd ?? start;
+      target.setRangeText(text, start, end, "end");
+      dispatchInputEvent(target);
+    } else {
+      document.execCommand("paste");
+    }
+    return;
+  }
+
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && key === "z") {
+    e.preventDefault();
+    document.execCommand("undo");
+    return;
+  }
+
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && key === "z") {
+    e.preventDefault();
+    document.execCommand("redo");
+  }
+};
 
 
 // ── Toolbar SVG icons (stroke-based, transparent background) ─────────────
@@ -1041,7 +1110,7 @@ export default function App() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
+      const target = (document.activeElement as HTMLElement | null) ?? (e.target as HTMLElement | null);
       const isEditable = !!target && (
         target.tagName === "INPUT" ||
         target.tagName === "TEXTAREA" ||
@@ -1049,6 +1118,10 @@ export default function App() {
         target.isContentEditable
       );
       if (isEditable) {
+        if (e.metaKey || e.ctrlKey) {
+          void handleEditableShortcut(e, target);
+          return;
+        }
         if (e.key === "F11") {
           e.preventDefault();
           toggleFullscreen();
@@ -1659,6 +1732,8 @@ export default function App() {
             "tabbar",
             isMac ? "tabbar--macos" : "",
             layoutMode === "Fence" ? "tabbar--fence" : "",
+            isWindowMaximized ? "tabbar--maximized" : "",
+            layoutMode === "Fence" && !sidebarVisible ? "tabbar--sidebar-collapsed" : "",
           ].filter(Boolean).join(" ")}
           onMouseDown={handleTabbarMouseDown}
         >

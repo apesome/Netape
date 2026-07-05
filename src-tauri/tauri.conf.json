@@ -34,6 +34,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "macOS": {
+      "infoPlist": "Info.macos.plist"
+    },
     "windows": {
       "nsis": {
         "languages": ["SimpChinese"]
