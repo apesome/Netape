@@ -154,10 +154,11 @@ mod win {
 
 #[cfg(target_os = "macos")]
 mod mac {
-    use cocoa::appkit::NSBitmapImageFileType;
     use cocoa::base::{id, nil};
     use cocoa::foundation::{NSPoint, NSRect, NSSize};
     use objc::{class, msg_send, sel, sel_impl};
+
+    const NS_PNG_FILE_TYPE: usize = 4;
 
     pub fn icon_b64(path: &str) -> Result<String, String> {
         let png = icon_png(path)?;
@@ -215,7 +216,8 @@ mod mac {
             let _: () = msg_send![image, drawInRect: draw_rect];
             let _: () = msg_send![class!(NSGraphicsContext), restoreGraphicsState];
 
-            let data: id = msg_send![bitmap, representationUsingType: NSBitmapImageFileType::NSPNGFileType properties: nil];
+            let data: id =
+                msg_send![bitmap, representationUsingType: NS_PNG_FILE_TYPE properties: nil];
             if data == nil {
                 let _: () = msg_send![pool, drain];
                 return Err("failed to encode PNG".into());
