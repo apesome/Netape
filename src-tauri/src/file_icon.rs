@@ -154,9 +154,9 @@ mod win {
 
 #[cfg(target_os = "macos")]
 mod mac {
-    use cocoa::appkit::{NSBitmapImageFileType, NSImage};
+    use cocoa::appkit::NSBitmapImageFileType;
     use cocoa::base::{id, nil};
-    use cocoa::foundation::{NSAutoreleasePool, NSData, NSRect, NSSize, NSString};
+    use cocoa::foundation::{NSPoint, NSRect, NSSize};
     use objc::{class, msg_send, sel, sel_impl};
 
     pub fn icon_b64(path: &str) -> Result<String, String> {
@@ -167,20 +167,23 @@ mod mac {
 
     fn icon_png(path: &str) -> Result<Vec<u8>, String> {
         unsafe {
-            let _pool = NSAutoreleasePool::new(nil);
+            let pool: id = msg_send![class!(NSAutoreleasePool), new];
             let ws: id = msg_send![class!(NSWorkspace), sharedWorkspace];
             if ws == nil {
+                let _: () = msg_send![pool, drain];
                 return Err("NSWorkspace unavailable".into());
             }
 
-            let ns_path = NSString::alloc(nil).init_str(path);
+            let ns_path = nsstring(path)?;
             let image: id = msg_send![ws, iconForFile: ns_path];
             if image == nil {
+                let _: () = msg_send![pool, drain];
                 return Err("iconForFile returned nil".into());
             }
 
             let size = NSSize::new(32.0, 32.0);
             let _: () = msg_send![image, setSize: size];
+            let color_space = nsstring("NSCalibratedRGBColorSpace")?;
 
             let bitmap: id = msg_send![class!(NSBitmapImageRep), alloc];
             let bitmap: id = msg_send![bitmap,
@@ -191,36 +194,57 @@ mod mac {
                 samplesPerPixel: 4usize
                 hasAlpha: true
                 isPlanar: false
-                colorSpaceName: NSString::alloc(nil).init_str("NSCalibratedRGBColorSpace")
+                colorSpaceName: color_space
                 bytesPerRow: 0usize
                 bitsPerPixel: 0usize
             ];
             if bitmap == nil {
+                let _: () = msg_send![pool, drain];
                 return Err("failed to create NSBitmapImageRep".into());
             }
 
             let ctx: id = msg_send![class!(NSGraphicsContext), graphicsContextWithBitmapImageRep: bitmap];
             if ctx == nil {
+                let _: () = msg_send![pool, drain];
                 return Err("failed to create graphics context".into());
             }
 
             let _: () = msg_send![class!(NSGraphicsContext), saveGraphicsState];
             let _: () = msg_send![class!(NSGraphicsContext), setCurrentContext: ctx];
-            let draw_rect = NSRect::new(cocoa::foundation::NSPoint::new(0.0, 0.0), size);
+            let draw_rect = NSRect::new(NSPoint::new(0.0, 0.0), size);
             let _: () = msg_send![image, drawInRect: draw_rect];
             let _: () = msg_send![class!(NSGraphicsContext), restoreGraphicsState];
 
             let data: id = msg_send![bitmap, representationUsingType: NSBitmapImageFileType::NSPNGFileType properties: nil];
             if data == nil {
+                let _: () = msg_send![pool, drain];
                 return Err("failed to encode PNG".into());
             }
 
-            let bytes = NSData::bytes(data) as *const u8;
-            let len = NSData::length(data);
+            let bytes: *const u8 = msg_send![data, bytes];
+            let len: usize = msg_send![data, length];
             if bytes.is_null() || len == 0 {
+                let _: () = msg_send![pool, drain];
                 return Err("empty PNG data".into());
             }
-            Ok(std::slice::from_raw_parts(bytes, len).to_vec())
+            let out = std::slice::from_raw_parts(bytes, len).to_vec();
+            let _: () = msg_send![pool, drain];
+            Ok(out)
+        }
+    }
+
+    unsafe fn nsstring(s: &str) -> Result<id, String> {
+        const NS_UTF8_ENCODING: usize = 4;
+        let ns: id = msg_send![class!(NSString), alloc];
+        let ns: id = msg_send![ns,
+            initWithBytes: s.as_ptr()
+            length: s.len()
+            encoding: NS_UTF8_ENCODING
+        ];
+        if ns == nil {
+            Err("failed to create NSString".into())
+        } else {
+            Ok(ns)
         }
     }
 }
