@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "./Toast";
 import { setInstalledPluginProtocols, pluginSupportedOnPlatform } from "../protocols";
-import { useT } from "../i18n";
+import { getSystemLang, useT } from "../i18n";
 
 type Section = "appearance" | "terminal" | "keyshortcuts" | "sftp" | "plugins" | "about";
 
@@ -57,7 +57,7 @@ interface Settings {
 
 const DEFAULTS: Settings = {
   theme: "Dark",
-  language: "zh_CN",
+  language: getSystemLang(),
   layout: "Fence",
   opacity: 1.0,
   backgroundRunning: true,

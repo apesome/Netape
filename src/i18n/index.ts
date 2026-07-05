@@ -2269,7 +2269,17 @@ const ja: Record<string, string> = {
 
 const DICTS: Record<string, Record<string, string>> = { zh_CN, en, de, ja };
 
-let _lang = "zh_CN";
+function detectSystemLang(): string {
+  if (typeof navigator === "undefined") return "zh_CN";
+  const lang = (navigator.language || "").toLowerCase();
+  if (lang.startsWith("zh")) return "zh_CN";
+  if (lang.startsWith("de")) return "de";
+  if (lang.startsWith("ja")) return "ja";
+  if (lang.startsWith("en")) return "en";
+  return "zh_CN";
+}
+
+let _lang = detectSystemLang();
 const _subs = new Set<() => void>();
 
 export function setLang(lang: string) {
@@ -2280,6 +2290,7 @@ export function setLang(lang: string) {
 }
 
 export function getLang(): string { return _lang; }
+export function getSystemLang(): string { return detectSystemLang(); }
 
 export function t(key: string, vars?: Record<string, string | number>): string {
   const dict = DICTS[_lang] ?? DICTS.zh_CN;
