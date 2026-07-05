@@ -47,7 +47,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -73,6 +73,7 @@ jobs:
 
       - name: Read release notes
         id: notes
+        shell: bash
         # Replace the $VERSION placeholder with the tag name; fall back to the
         # raw file on manual (non-tag) runs.
         run: |
@@ -87,7 +88,9 @@ jobs:
             echo "__EOF__"
           } >> "$GITHUB_OUTPUT"
 
-      - uses: tauri-apps/tauri-action@v1
+      - name: Build release artifacts
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -98,4 +101,10 @@ jobs:
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
+          args: ${{ matrix.args }}
+
+      - name: Build artifacts (manual run)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: tauri-apps/tauri-action@v1
+        with:
           args: ${{ matrix.args }}
