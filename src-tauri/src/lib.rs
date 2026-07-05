@@ -153,6 +153,10 @@ pub fn run() {
                     let _ = win.set_decorations(true);
                     let _ = win.set_title_bar_style(TitleBarStyle::Overlay);
                 }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = win.set_decorations(false);
+                }
                 let _ = win.center();
             }
 

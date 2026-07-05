@@ -18,7 +18,10 @@
         "height": 720,
         "minWidth": 640,
         "minHeight": 400,
-        "decorations": false,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 14, "y": 10 },
         "visible": false,
         "center": true,
         "backgroundColor": { "red": 30, "green": 30, "blue": 46, "alpha": 255 }
