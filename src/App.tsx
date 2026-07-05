@@ -1041,6 +1041,21 @@ export default function App() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isEditable = !!target && (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      );
+      if (isEditable) {
+        if (e.key === "F11") {
+          e.preventDefault();
+          toggleFullscreen();
+        }
+        return;
+      }
+
       const ctrl = e.ctrlKey || e.metaKey;
       // Ctrl+N: create a new host
       if (ctrl && !e.shiftKey && e.key.toLowerCase() === "n") {
@@ -1639,7 +1654,14 @@ export default function App() {
       <div className="fence-main">
 
         {/* ── Tab bar with integrated window controls ── */}
-        <div className="tabbar" onMouseDown={handleTabbarMouseDown}>
+        <div
+          className={[
+            "tabbar",
+            isMac ? "tabbar--macos" : "",
+            layoutMode === "Fence" ? "tabbar--fence" : "",
+          ].filter(Boolean).join(" ")}
+          onMouseDown={handleTabbarMouseDown}
+        >
 
           {/* Show the sidebar expand button only in Fence layout. */}
           {layoutMode === "Fence" && !sidebarVisible && !isFullscreen && (
@@ -1668,7 +1690,7 @@ export default function App() {
           {layoutMode !== "Fence" && tabs.filter(t => t.pinned && t.kind === "sftp").map(tab => (
             <div
               key={tab.id}
-              className={`tab tab-sftp-pinned${activeId === tab.id ? " active" : ""}`}
+              className={`tab tab--pinned tab-sftp-pinned${activeId === tab.id ? " active" : ""}`}
               onClick={() => setActiveId(SFTP_PIN_ID)}
               data-tooltip={translatedTabTitle(tab, t)}
             >
@@ -1690,7 +1712,7 @@ export default function App() {
               <div
                 key={tab.id}
                 data-tabid={tab.id}
-                className={`tab${activeId === tab.id ? " active" : ""}`}
+                className={`tab tab--pinned${activeId === tab.id ? " active" : ""}`}
                 onClick={() => setActiveId(SFTP_PIN_ID)}
                 data-tooltip={translatedTabTitle(tab, t)}
               >

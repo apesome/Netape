@@ -838,8 +838,12 @@ html, body, #root {
   position: relative;
 }
 
-.app-macos .tabbar {
+.tabbar--macos {
   padding-left: 76px;
+}
+
+.tabbar--macos.tabbar--fence {
+  padding-left: 0;
 }
 
 .sidebar-toggle-inline {
@@ -934,6 +938,18 @@ html, body, #root {
 .tab:hover .tab-close  { opacity: 0.7; }
 .tab.active .tab-close { opacity: 0.6; }
 .tab-close:hover { background: rgba(255,255,255,0.12); opacity: 1 !important; }
+
+.tab--pinned {
+  width: fit-content;
+  min-width: 0;
+  max-width: none;
+}
+
+.tab--pinned .tab-title {
+  flex: none;
+  overflow: visible;
+  text-overflow: unset;
+}
 
 .tab-add {
   flex-shrink: 0;
@@ -2811,15 +2827,7 @@ input[type="number"].hf-ctrl {
 .tab-home--fixed {
   flex-shrink: 0;
   border-right: 1px solid var(--border);
-  border-radius: 0 6px 0 0;   /* keep top-right curve; left is flush against edge */
-  width: fit-content;
-  min-width: 0;
-  max-width: none;
-}
-.tab-home--fixed .tab-title {
-  flex: none;          /* don't expand; size to text content only */
-  overflow: visible;
-  text-overflow: unset;
+  border-radius: 6px 6px 0 0;
 }
 
 /* Pinned transfer tab on the right; it cannot be closed. */
@@ -2827,14 +2835,6 @@ input[type="number"].hf-ctrl {
   flex-shrink: 0;
   border-right: 1px solid var(--border);
   border-radius: 6px 6px 0 0;
-  width: fit-content;
-  min-width: 0;
-  max-width: none;
-}
-.tab-sftp-pinned .tab-title {
-  flex: none;
-  overflow: visible;
-  text-overflow: unset;
 }
 
 /* Left / right scroll arrows */
