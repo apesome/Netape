@@ -43,3 +43,7 @@ raw-window-handle = "0.6"
 winapi = { version = "0.3", features = [
     "shellapi", "winuser", "wingdi", "windef", "minwindef", "utilapiset",
 ] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.25"
+objc = "0.2"

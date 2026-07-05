@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { type Host, type AuthType, type Tunneling, type TunnelingType, type KeyPair, newHost } from "../types";
 import { getProtocol, useAvailableProtocols, type SectionId } from "../protocols";
 import { t, useT } from "../i18n";
+import CustomSelect from "./CustomSelect";
 
 // ── Section nav icons (match each tab's meaning) ──
 const svgProps = {
@@ -374,12 +375,16 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
 
                 {def.showWslDistro && (<>
                   <label className="hf-lbl" htmlFor="hf-wsl">{t("host.dialog.distro")}</label>
-                  <select id="hf-wsl" className="hf-ctrl"
+                  <CustomSelect
+                    id="hf-wsl"
+                    className="hf-ctrl"
                     value={wslDistros.includes(form.host) ? form.host : ""}
-                    onChange={(e) => set("host", e.target.value)}>
-                    <option value="">{t("host.dialog.distroDefault")}</option>
-                    {wslDistros.map((d) => <option key={d} value={d}>{d}</option>)}
-                  </select>
+                    onChange={(value) => set("host", value)}
+                    options={[
+                      { value: "", label: t("host.dialog.distroDefault") },
+                      ...wslDistros.map((d) => ({ value: d, label: d })),
+                    ]}
+                  />
                 </>)}
 
                 {needsHost && (<>
@@ -454,14 +459,18 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
 
                 {def.showAuth && (<>
                   <label className="hf-lbl" htmlFor="hf-auth">{t("host.dialog.authType")}</label>
-                  <select id="hf-auth" className="hf-ctrl"
+                  <CustomSelect
+                    id="hf-auth"
+                    className="hf-ctrl"
                     value={form.authentication.type}
-                    onChange={(e) => changeAuthType(e.target.value)}>
-                    <option value="No">{t("host.dialog.auth.none")}</option>
-                    <option value="Password">{t("host.dialog.auth.password")}</option>
-                    <option value="PublicKey">{t("host.dialog.auth.publickey")}</option>
-                    <option value="KeyboardInteractive">{t("host.dialog.auth.keyboard")}</option>
-                  </select>
+                    onChange={changeAuthType}
+                    options={[
+                      { value: "No", label: t("host.dialog.auth.none") },
+                      { value: "Password", label: t("host.dialog.auth.password") },
+                      { value: "PublicKey", label: t("host.dialog.auth.publickey") },
+                      { value: "KeyboardInteractive", label: t("host.dialog.auth.keyboard") },
+                    ]}
+                  />
                 </>)}
 
                 {def.showAuth && form.authentication.type === "Password" && (<>
@@ -481,14 +490,19 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
                 {def.showAuth && form.authentication.type === "PublicKey" && (<>
                   <label className="hf-lbl" htmlFor="hf-key">{t("host.dialog.key")}</label>
                   <div className="hf-inline">
-                    <select id="hf-key" className="hf-ctrl"
+                    <CustomSelect
+                      id="hf-key"
+                      className="hf-ctrl"
                       value={keys.some((k) => k.id === form.authentication.password) ? form.authentication.password : ""}
-                      onChange={(e) => setAuth("password", e.target.value)}>
-                      <option value="">{t("host.dialog.keyAuto")}</option>
-                      {keys.map((k) => (
-                        <option key={k.id} value={k.id}>{k.name}{k.keyType ? ` · ${k.keyType}` : ""}</option>
-                      ))}
-                    </select>
+                      onChange={(value) => setAuth("password", value)}
+                      options={[
+                        { value: "", label: t("host.dialog.keyAuto") },
+                        ...keys.map((k) => ({
+                          value: k.id,
+                          label: `${k.name}${k.keyType ? ` · ${k.keyType}` : ""}`,
+                        })),
+                      ]}
+                    />
                     <button type="button" className="hf-key-import"
                       onClick={() => keyFileRef.current?.click()}>{t("host.dialog.keyImport")}</button>
                     <input ref={keyFileRef} type="file" hidden
@@ -521,13 +535,17 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
             {(showAllSections ? sections.includes("proxy") : activeSection === "proxy") && renderSectionCard("proxy", (
               <div className="hf">
                 <label className="hf-lbl" htmlFor="hf-ptype">{t("host.dialog.proxyType")}</label>
-                <select id="hf-ptype" className="hf-ctrl"
+                <CustomSelect
+                  id="hf-ptype"
+                  className="hf-ctrl"
                   value={form.proxy.type}
-                  onChange={(e) => setProxy("type", e.target.value)}>
-                  <option value="NO">{t("host.dialog.proxy.none")}</option>
-                  <option value="HTTP">HTTP</option>
-                  <option value="SOCKS5">SOCKS5</option>
-                </select>
+                  onChange={(value) => setProxy("type", value)}
+                  options={[
+                    { value: "NO", label: t("host.dialog.proxy.none") },
+                    { value: "HTTP", label: "HTTP" },
+                    { value: "SOCKS5", label: "SOCKS5" },
+                  ]}
+                />
 
                 {form.proxy.type !== "NO" && (<>
                   <label className="hf-lbl" htmlFor="hf-phost">{t("host.dialog.proxyHost")}</label>
@@ -543,12 +561,16 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
                   </div>
 
                   <label className="hf-lbl" htmlFor="hf-pauth">{t("host.dialog.proxyAuth")}</label>
-                  <select id="hf-pauth" className="hf-ctrl"
+                  <CustomSelect
+                    id="hf-pauth"
+                    className="hf-ctrl"
                     value={form.proxy.authenticationType}
-                    onChange={(e) => setProxy("authenticationType", e.target.value)}>
-                    <option value="No">{t("host.dialog.proxyAuth.none")}</option>
-                    <option value="Password">{t("host.dialog.proxyAuth.password")}</option>
-                  </select>
+                    onChange={(value) => setProxy("authenticationType", value)}
+                    options={[
+                      { value: "No", label: t("host.dialog.proxyAuth.none") },
+                      { value: "Password", label: t("host.dialog.proxyAuth.password") },
+                    ]}
+                  />
 
                   {form.proxy.authenticationType !== "No" && (<>
                     <label className="hf-lbl" htmlFor="hf-puser">{t("host.dialog.username")}</label>
@@ -596,13 +618,13 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
                       <span className="htable-cell" style={{ width: 68 }}>{tunnelTypeLabels[tun.type] ?? tun.type}</span>
                       <span className="htable-cell" style={{ flex: 1 }}>{tun.sourceHost}:{tun.sourcePort}</span>
                       <span className="htable-cell" style={{ flex: 1 }}>{tun.type === "Dynamic" ? "—" : `${tun.destinationHost}:${tun.destinationPort}`}</span>
-                      <button className="htable-del" onClick={(e) => { e.stopPropagation(); delTunnel(idx); }}>×</button>
+                  <button type="button" className="htable-del" onClick={(e) => { e.stopPropagation(); delTunnel(idx); }}>×</button>
                     </div>
                   ))}
                 </div>
 
                 {!tunForm && (
-                  <button className="htable-add-btn"
+                  <button type="button" className="htable-add-btn"
                     onClick={() => setTunForm({ idx: null, data: emptyTunneling() })}>
                     {t("host.dialog.tunnelAdd")}
                   </button>
@@ -620,12 +642,17 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
                         placeholder={t("host.dialog.tunnelNamePlaceholder")} autoFocus />
 
                       <label className="hf-lbl" htmlFor="tf-type">{t("host.dialog.tunnelType")}</label>
-                      <select id="tf-type" className="hf-ctrl" value={tunForm.data.type}
-                        onChange={(e) => setTunField("type", e.target.value as TunnelingType)}>
-                        <option value="Local">{t("host.dialog.tunnelLocal")}</option>
-                        <option value="Remote">{t("host.dialog.tunnelRemote")}</option>
-                        <option value="Dynamic">{t("host.dialog.tunnelDynamic")}</option>
-                      </select>
+                      <CustomSelect
+                        id="tf-type"
+                        className="hf-ctrl"
+                        value={tunForm.data.type}
+                        onChange={(value) => setTunField("type", value as TunnelingType)}
+                        options={[
+                          { value: "Local", label: t("host.dialog.tunnelLocal") },
+                          { value: "Remote", label: t("host.dialog.tunnelRemote") },
+                          { value: "Dynamic", label: t("host.dialog.tunnelDynamic") },
+                        ]}
+                      />
 
                       <label className="hf-lbl" htmlFor="tf-sh">{t("host.dialog.tunnelSrcAddr")}</label>
                       <div className="hf-inline">
@@ -654,8 +681,8 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
                       </>)}
                     </div>
                     <div className="htable-form-actions">
-                      <button onClick={() => setTunForm(null)}>{t("host.dialog.cancel")}</button>
-                      <button className="btn-primary" onClick={commitTunnel}>
+                      <button type="button" onClick={() => setTunForm(null)}>{t("host.dialog.cancel")}</button>
+                      <button type="button" className="btn-primary" onClick={commitTunnel}>
                         {tunForm.idx === null ? t("host.dialog.tunnelAddBtn") : t("host.dialog.tunnelSaveBtn")}
                       </button>
                     </div>
@@ -682,13 +709,13 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
                       <div key={jid} className="htable-row">
                         <span className="htable-cell" style={{ flex: 1 }}>{jh?.name ?? jid}</span>
                         <span className="htable-cell" style={{ flex: 1 }}>{jh ? `${jh.host}:${jh.port}` : ""}</span>
-                        <button className="htable-del" onClick={() => removeJumpHost(jid)}>×</button>
+                        <button type="button" className="htable-del" onClick={() => removeJumpHost(jid)}>×</button>
                       </div>
                     );
                   })}
                 </div>
 
-                <button className="htable-add-btn" onClick={() => setShowJumpPicker((v) => !v)}>
+                <button type="button" className="htable-add-btn" onClick={() => setShowJumpPicker((v) => !v)}>
                   {t("host.dialog.jumpAdd")}
                 </button>
 
@@ -713,16 +740,20 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
             {(showAllSections ? sections.includes("terminal") : activeSection === "terminal") && renderSectionCard("terminal", (
               <div className="hf">
                 <label className="hf-lbl" htmlFor="hf-enc">{t("host.dialog.encoding")}</label>
-                <select id="hf-enc" className="hf-ctrl"
+                <CustomSelect
+                  id="hf-enc"
+                  className="hf-ctrl"
                   value={form.options.encoding}
-                  onChange={(e) => setOpts("encoding", e.target.value)}>
-                  <option value="UTF-8">UTF-8</option>
-                  <option value="GBK">GBK</option>
-                  <option value="GB2312">GB2312</option>
-                  <option value="Big5">Big5</option>
-                  <option value="Shift_JIS">Shift_JIS</option>
-                  <option value="EUC-JP">EUC-JP</option>
-                </select>
+                  onChange={(value) => setOpts("encoding", value)}
+                  options={[
+                    { value: "UTF-8", label: "UTF-8" },
+                    { value: "GBK", label: "GBK" },
+                    { value: "GB2312", label: "GB2312" },
+                    { value: "Big5", label: "Big5" },
+                    { value: "Shift_JIS", label: "Shift_JIS" },
+                    { value: "EUC-JP", label: "EUC-JP" },
+                  ]}
+                />
 
                 {def.tab.kind !== "local" && (
                   <>

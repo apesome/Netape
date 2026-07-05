@@ -4,6 +4,7 @@ import type { KeyPair } from "../types";
 import ConfirmDialog, { useConfirm } from "./ConfirmDialog";
 import { InboxEmptyIcon } from "./icons";
 import { useT } from "../i18n";
+import CustomSelect from "./CustomSelect";
 
 interface Props {
   onClose: () => void;
@@ -134,10 +135,14 @@ export default function KeyManagerDialog({ onClose }: Props) {
               </label>
               <label className="field">
                 <span>{t("keyMgr.type")}</span>
-                <select value={genType} onChange={(e) => setGenType(e.target.value as "ED25519" | "RSA")}>
-                  <option value="ED25519">{t("keyMgr.ed25519")}</option>
-                  <option value="RSA">{t("keyMgr.rsa4096")}</option>
-                </select>
+                <CustomSelect
+                  value={genType}
+                  onChange={(value) => setGenType(value as "ED25519" | "RSA")}
+                  options={[
+                    { value: "ED25519", label: t("keyMgr.ed25519") },
+                    { value: "RSA", label: t("keyMgr.rsa4096") },
+                  ]}
+                />
               </label>
               {error && <div className="dialog-error">{error}</div>}
             </div>

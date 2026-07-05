@@ -11,7 +11,10 @@ pub fn get_file_icon(path: String) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     return win::icon_b64(&path);
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    return mac::icon_b64(&path);
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     return Err("not supported on this platform".into());
 }
 
@@ -144,5 +147,80 @@ mod win {
             writer.write_image_data(rgba).map_err(|e| e.to_string())?;
         } // writer + enc drop here, releasing the borrow on buf
         Ok(buf)
+    }
+}
+
+// ─── macOS implementation ────────────────────────────────────────────────────
+
+#[cfg(target_os = "macos")]
+mod mac {
+    use cocoa::appkit::{NSBitmapImageFileType, NSImage};
+    use cocoa::base::{id, nil};
+    use cocoa::foundation::{NSAutoreleasePool, NSData, NSRect, NSSize, NSString};
+    use objc::{class, msg_send, sel, sel_impl};
+
+    pub fn icon_b64(path: &str) -> Result<String, String> {
+        let png = icon_png(path)?;
+        use base64::Engine as _;
+        Ok(base64::engine::general_purpose::STANDARD.encode(&png))
+    }
+
+    fn icon_png(path: &str) -> Result<Vec<u8>, String> {
+        unsafe {
+            let _pool = NSAutoreleasePool::new(nil);
+            let ws: id = msg_send![class!(NSWorkspace), sharedWorkspace];
+            if ws == nil {
+                return Err("NSWorkspace unavailable".into());
+            }
+
+            let ns_path = NSString::alloc(nil).init_str(path);
+            let image: id = msg_send![ws, iconForFile: ns_path];
+            if image == nil {
+                return Err("iconForFile returned nil".into());
+            }
+
+            let size = NSSize::new(32.0, 32.0);
+            let _: () = msg_send![image, setSize: size];
+
+            let bitmap: id = msg_send![class!(NSBitmapImageRep), alloc];
+            let bitmap: id = msg_send![bitmap,
+                initWithBitmapDataPlanes: std::ptr::null_mut::<*mut u8>()
+                pixelsWide: 32usize
+                pixelsHigh: 32usize
+                bitsPerSample: 8usize
+                samplesPerPixel: 4usize
+                hasAlpha: true
+                isPlanar: false
+                colorSpaceName: NSString::alloc(nil).init_str("NSCalibratedRGBColorSpace")
+                bytesPerRow: 0usize
+                bitsPerPixel: 0usize
+            ];
+            if bitmap == nil {
+                return Err("failed to create NSBitmapImageRep".into());
+            }
+
+            let ctx: id = msg_send![class!(NSGraphicsContext), graphicsContextWithBitmapImageRep: bitmap];
+            if ctx == nil {
+                return Err("failed to create graphics context".into());
+            }
+
+            let _: () = msg_send![class!(NSGraphicsContext), saveGraphicsState];
+            let _: () = msg_send![class!(NSGraphicsContext), setCurrentContext: ctx];
+            let draw_rect = NSRect::new(cocoa::foundation::NSPoint::new(0.0, 0.0), size);
+            let _: () = msg_send![image, drawInRect: draw_rect];
+            let _: () = msg_send![class!(NSGraphicsContext), restoreGraphicsState];
+
+            let data: id = msg_send![bitmap, representationUsingType: NSBitmapImageFileType::NSPNGFileType properties: nil];
+            if data == nil {
+                return Err("failed to encode PNG".into());
+            }
+
+            let bytes = NSData::bytes(data) as *const u8;
+            let len = NSData::length(data);
+            if bytes.is_null() || len == 0 {
+                return Err("empty PNG data".into());
+            }
+            Ok(std::slice::from_raw_parts(bytes, len).to_vec())
+        }
     }
 }

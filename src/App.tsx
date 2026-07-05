@@ -302,6 +302,7 @@ function HostDrawerResizer({
 export default function App() {
   const t = useT();
   const appWindow = getCurrentWindow();
+  const isMac = /mac/i.test(navigator.platform || navigator.userAgent || "");
 
   // Tab bar — refs & state (effects registered after activeId below)
   const tabsScrollRef   = useRef<HTMLDivElement>(null);
@@ -1369,14 +1370,14 @@ export default function App() {
     setHostDialogMode(mode);
     setShowHostDialog(true);
   };
-  const openNewFolder = async (parentId: string, name: string) => {
+  const openNewFolder = async (parentId: string, name: string, protocol = "SSH") => {
     if (!name.trim()) return;
     try {
       await invoke("host_save", { host: { id: crypto.randomUUID(), name: name.trim(), protocol: "Folder", host: "", port: 0, username: "", remark: "",
         authentication: { type: "No", password: "" },
         proxy: { type: "NO", host: "", port: 0, authenticationType: "No", username: "", password: "" },
         options: { encoding: "UTF-8", heartbeatInterval: 0, tags: [], extras: {}, startupCommand: "", env: "", jumpHosts: [], sftpDefaultDirectory: "" },
-        tunnelings: [], sort: 0, parentId, ownerId: "0", creatorId: "0", ownerType: "", deleted: false,
+        tunnelings: [], sort: 0, parentId, ownerId: "0", creatorId: "0", ownerType: protocol, deleted: false,
         createDate: Date.now(), updateDate: Date.now() } });
       setHostsVersion((n) => n + 1);
     } catch (e) { toast(String(e)); }
@@ -1612,7 +1613,7 @@ export default function App() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className={`netape-app${isFullscreen ? " app-fullscreen" : ""}`}>
+    <div className={`netape-app${isFullscreen ? " app-fullscreen" : ""}${isMac ? " app-macos" : ""}`}>
       <GlobalTooltip />
       <GlobalToast />
 
@@ -1811,24 +1812,48 @@ export default function App() {
           </div>
 
           {/* Window controls (replaces OS titlebar) */}
-          <div className="winctrls">
-            <button className="wctrl wctrl-min" onMouseDown={(e) => e.stopPropagation()} onClick={() => appWindow.minimize()} data-tooltip={t("app.window.minimize")}>
-              <WcMin />
-            </button>
-            <button className="wctrl wctrl-max" onMouseDown={(e) => e.stopPropagation()} onClick={async () => {
-              if (isWindowMaximized) {
-                await appWindow.unmaximize();
-                await appWindow.setSize(new LogicalSize(1024, 720));
-                await appWindow.center();
-              } else {
-                await appWindow.maximize();
-              }
-            }} data-tooltip={isWindowMaximized ? t("app.window.restore") : t("app.window.maximize")}>
-              {isWindowMaximized ? <WcRestore /> : <WcMax />}
-            </button>
-            <button className="wctrl wctrl-close" onMouseDown={(e) => e.stopPropagation()} onClick={handleWindowClose} data-tooltip={t("app.window.close")}>
-              <WcClose />
-            </button>
+          <div className={`winctrls${isMac ? " winctrls--macos" : ""}`}>
+            {isMac ? (
+              <>
+                <button className="wctrl wctrl-close" onMouseDown={(e) => e.stopPropagation()} onClick={handleWindowClose} data-tooltip={t("app.window.close")}>
+                  <span className="wctrl-dot" />
+                </button>
+                <button className="wctrl wctrl-min" onMouseDown={(e) => e.stopPropagation()} onClick={() => appWindow.minimize()} data-tooltip={t("app.window.minimize")}>
+                  <span className="wctrl-dot" />
+                </button>
+                <button className="wctrl wctrl-max" onMouseDown={(e) => e.stopPropagation()} onClick={async () => {
+                  if (isWindowMaximized) {
+                    await appWindow.unmaximize();
+                    await appWindow.setSize(new LogicalSize(1024, 720));
+                    await appWindow.center();
+                  } else {
+                    await appWindow.maximize();
+                  }
+                }} data-tooltip={isWindowMaximized ? t("app.window.restore") : t("app.window.maximize")}>
+                  <span className="wctrl-dot" />
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="wctrl wctrl-min" onMouseDown={(e) => e.stopPropagation()} onClick={() => appWindow.minimize()} data-tooltip={t("app.window.minimize")}>
+                  <WcMin />
+                </button>
+                <button className="wctrl wctrl-max" onMouseDown={(e) => e.stopPropagation()} onClick={async () => {
+                  if (isWindowMaximized) {
+                    await appWindow.unmaximize();
+                    await appWindow.setSize(new LogicalSize(1024, 720));
+                    await appWindow.center();
+                  } else {
+                    await appWindow.maximize();
+                  }
+                }} data-tooltip={isWindowMaximized ? t("app.window.restore") : t("app.window.maximize")}>
+                  {isWindowMaximized ? <WcRestore /> : <WcMax />}
+                </button>
+                <button className="wctrl wctrl-close" onMouseDown={(e) => e.stopPropagation()} onClick={handleWindowClose} data-tooltip={t("app.window.close")}>
+                  <WcClose />
+                </button>
+              </>
+            )}
           </div>
         </div>
 

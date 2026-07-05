@@ -4,6 +4,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "./Toast";
 import { setInstalledPluginProtocols, pluginSupportedOnPlatform } from "../protocols";
 import { getSystemLang, useT } from "../i18n";
+import CustomSelect from "./CustomSelect";
 
 type Section = "appearance" | "terminal" | "keyshortcuts" | "sftp" | "plugins" | "about";
 
@@ -111,18 +112,18 @@ const FIELD_KEYS: Record<keyof Settings, string> = {
 
 const SECTION_IDS: Section[] = ["appearance", "terminal", "keyshortcuts", "sftp", "plugins", "about"];
 
-const SHORTCUT_KEYS: { key: string; shortcut: string }[] = [
-  { key: "shortcut.newHost",         shortcut: "Ctrl+N" },
-  { key: "shortcut.toggleSidebar",   shortcut: "Ctrl+Shift+B" },
-  { key: "shortcut.closeTab",        shortcut: "Ctrl+W" },
-  { key: "shortcut.nextTab",         shortcut: "Ctrl+Tab" },
-  { key: "shortcut.prevTab",         shortcut: "Ctrl+Shift+Tab" },
-  { key: "shortcut.settings",        shortcut: "Ctrl+Shift+S" },
-  { key: "shortcut.keyManager",      shortcut: "Ctrl+Shift+K" },
-  { key: "shortcut.newLocalTerminal",shortcut: "Ctrl+T" },
-  { key: "shortcut.notes",           shortcut: "Ctrl+Shift+P" },
-  { key: "shortcut.sftp",            shortcut: "Ctrl+Shift+G" },
-  { key: "shortcut.highlight",       shortcut: "Ctrl+Shift+H" },
+const SHORTCUT_KEYS: { key: string; windows: string; mac: string }[] = [
+  { key: "shortcut.newHost",          windows: "Ctrl+N",         mac: "Cmd+N" },
+  { key: "shortcut.toggleSidebar",    windows: "Ctrl+Shift+B",   mac: "Cmd+Shift+B" },
+  { key: "shortcut.closeTab",         windows: "Ctrl+W",         mac: "Cmd+W" },
+  { key: "shortcut.nextTab",          windows: "Ctrl+Tab",       mac: "Cmd+Tab" },
+  { key: "shortcut.prevTab",          windows: "Ctrl+Shift+Tab", mac: "Cmd+Shift+Tab" },
+  { key: "shortcut.settings",         windows: "Ctrl+Shift+S",   mac: "Cmd+Shift+S" },
+  { key: "shortcut.keyManager",       windows: "Ctrl+Shift+K",   mac: "Cmd+Shift+K" },
+  { key: "shortcut.newLocalTerminal", windows: "Ctrl+T",         mac: "Cmd+T" },
+  { key: "shortcut.notes",            windows: "Ctrl+Shift+P",   mac: "Cmd+Shift+P" },
+  { key: "shortcut.sftp",             windows: "Ctrl+Shift+G",   mac: "Cmd+Shift+G" },
+  { key: "shortcut.highlight",        windows: "Ctrl+Shift+H",   mac: "Cmd+Shift+H" },
 ];
 
 const VERSION = "0.1.0-alpha";
@@ -216,6 +217,7 @@ const SECTION_ICONS: Record<Section, React.ReactNode> = {
 
 export default function SettingsDialog({ onClose, onApply }: { onClose: () => void; onApply?: (key: string, value: string) => void }) {
   const t = useT();
+  const isMac = /mac/i.test(navigator.platform || navigator.userAgent || "");
   const [section, setSection] = useState<Section>("appearance");
   const [s, setS] = useState<Settings>(DEFAULTS);
   const [loading, setLoading] = useState(true);
@@ -347,14 +349,13 @@ export default function SettingsDialog({ onClose, onApply }: { onClose: () => vo
   const rowSel = (field: keyof Settings, label: string, opts: { value: string; label: string }[]) => (
     <div className="srow">
       <span className="slabel">{label}</span>
-      <select
+      <CustomSelect
         className="sctl"
         value={s[field] as string}
-        onChange={(e) => upd(field, e.target.value)}
+        onChange={(value) => upd(field, value)}
         disabled={loading}
-      >
-        {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+        options={opts}
+      />
     </div>
   );
 
@@ -487,62 +488,54 @@ export default function SettingsDialog({ onClose, onApply }: { onClose: () => vo
               {/* Font */}
               <div className="srow">
                 <span className="slabel">{t("terminal.font")}</span>
-                <select
+                <CustomSelect
                   className="sctl"
                   value={s.font}
-                  onChange={(e) => upd("font", e.target.value)}
+                  onChange={(value) => upd("font", value)}
                   disabled={loading}
-                >
-                  {systemFonts.length > 0
+                  options={systemFonts.length > 0
                     ? (() => {
                         const list = systemFonts.includes(s.font)
                           ? systemFonts
                           : [s.font, ...systemFonts];
-                        return list.map((f) => (
-                          <option key={f} value={f}>{f}</option>
-                        ));
+                        return list.map((f) => ({ value: f, label: f }));
                       })()
-                    : (
-                        <>
-                          <option value="JetBrains Mono">JetBrains Mono</option>
-                          <option value="Consolas">Consolas</option>
-                          <option value="Cascadia Code">Cascadia Code</option>
-                          <option value="Fira Code">Fira Code</option>
-                          <option value="Source Code Pro">Source Code Pro</option>
-                          <option value="Monaco">Monaco</option>
-                          <option value="Courier New">Courier New</option>
-                        </>
-                      )
+                    : ([
+                        "JetBrains Mono",
+                        "Consolas",
+                        "Cascadia Code",
+                        "Fira Code",
+                        "Source Code Pro",
+                        "Monaco",
+                        "Courier New",
+                      ].map((f) => ({ value: f, label: f })))
                   }
-                </select>
+                />
               </div>
               <div className="srow">
                 <span className="slabel">{t("terminal.fallbackFont")}</span>
-                <select
+                <CustomSelect
                   className="sctl"
                   value={s.fallbackFont}
-                  onChange={(e) => upd("fallbackFont", e.target.value)}
+                  onChange={(value) => upd("fallbackFont", value)}
                   disabled={loading}
-                >
-                  <option value="">{t("terminal.fallbackFont.auto")}</option>
-                  {systemFonts.length > 0
-                    ? (() => {
-                        const list = s.fallbackFont && !systemFonts.includes(s.fallbackFont)
-                          ? [s.fallbackFont, ...systemFonts]
-                          : systemFonts;
-                        return list.map((f) => (
-                          <option key={f} value={f}>{f}</option>
-                        ));
-                      })()
-                    : (
-                        <>
-                          <option value="Microsoft YaHei Mono">Microsoft YaHei Mono</option>
-                          <option value="Noto Sans Mono CJK SC">Noto Sans Mono CJK SC</option>
-                          <option value="WenQuanYi Mono">WenQuanYi Mono</option>
-                        </>
-                      )
-                  }
-                </select>
+                  options={(systemFonts.length > 0
+                    ? [
+                        { value: "", label: t("terminal.fallbackFont.auto") },
+                        ...(() => {
+                          const list = s.fallbackFont && !systemFonts.includes(s.fallbackFont)
+                            ? [s.fallbackFont, ...systemFonts]
+                            : systemFonts;
+                          return list.map((f) => ({ value: f, label: f }));
+                        })(),
+                      ]
+                    : [
+                        { value: "", label: t("terminal.fallbackFont.auto") },
+                        { value: "Microsoft YaHei Mono", label: "Microsoft YaHei Mono" },
+                        { value: "Noto Sans Mono CJK SC", label: "Noto Sans Mono CJK SC" },
+                        { value: "WenQuanYi Mono", label: "WenQuanYi Mono" },
+                      ])}
+                />
               </div>
               {/* Font size */}
               <div className="srow">
@@ -583,12 +576,11 @@ export default function SettingsDialog({ onClose, onApply }: { onClose: () => vo
               <div className="srow">
                 <span className="slabel">{t("terminal.localShell")}</span>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <select
+                  <CustomSelect
                     className="sctl"
                     style={{ width: "100%" }}
                     value={shellCustom ? "__custom__" : (s.localShell || "")}
-                    onChange={(e) => {
-                      const v = e.target.value;
+                    onChange={(v) => {
                       if (v === "__custom__") {
                         setShellCustom(true);
                         if (discoveredShells.some((sh) => sh.id === s.localShell)) {
@@ -600,13 +592,12 @@ export default function SettingsDialog({ onClose, onApply }: { onClose: () => vo
                       }
                     }}
                     disabled={loading}
-                  >
-                    <option value="">{t("terminal.localShell.default")}</option>
-                    {discoveredShells.map((sh) => (
-                      <option key={sh.id} value={sh.id}>{sh.name}</option>
-                    ))}
-                    <option value="__custom__">{t("terminal.localShell.custom")}</option>
-                  </select>
+                    options={[
+                      { value: "", label: t("terminal.localShell.default") },
+                      ...discoveredShells.map((sh) => ({ value: sh.id, label: sh.name })),
+                      { value: "__custom__", label: t("terminal.localShell.custom") },
+                    ]}
+                  />
                   {shellCustom && (
                     <>
                       <input
@@ -638,7 +629,7 @@ export default function SettingsDialog({ onClose, onApply }: { onClose: () => vo
                 {SHORTCUT_KEYS.map((r, i) => (
                   <div className="shortcuts-row" key={i}>
                     <span className="shortcut-action">{t(r.key)}</span>
-                    <kbd className="shortcut-key">{r.shortcut}</kbd>
+                    <kbd className="shortcut-key">{isMac ? r.mac : r.windows}</kbd>
                   </div>
                 ))}
               </div>

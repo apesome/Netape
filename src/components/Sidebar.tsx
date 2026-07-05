@@ -7,8 +7,6 @@ import { toast } from "./Toast";
 import { useAvailableProtocols } from "../protocols";
 import { useT } from "../i18n";
 
-const NO_FILTER = { icon: "≡", label: "" };
-
 interface Props {
   hosts: Host[];
   onToggle: () => void;
@@ -16,7 +14,7 @@ interface Props {
   onEditHost: (host: Host) => void;
   onDeleteHost: () => void;
   onNewHost: (parentId?: string, protocol?: string) => void;
-  onNewFolder: (parentId: string, name: string) => void;
+  onNewFolder: (parentId: string, name: string, protocol?: string) => void;
   onRefresh: () => void;
   width?: number;
 }
@@ -50,7 +48,13 @@ export default function Sidebar({
     return () => document.removeEventListener("mousedown", fn);
   }, [protoDropOpen]);
 
-  const curProto = PROTO_OPTIONS.find((p) => p.value === protoFilter) ?? NO_FILTER;
+  useEffect(() => {
+    if (PROTO_OPTIONS.length > 0 && !PROTO_OPTIONS.some((p) => p.value === protoFilter)) {
+      setProtoFilter(PROTO_OPTIONS[0].value);
+    }
+  }, [PROTO_OPTIONS, protoFilter]);
+
+  const curProto = PROTO_OPTIONS.find((p) => p.value === protoFilter) ?? PROTO_OPTIONS[0];
 
   const handleDelete = async (host: Host) => {
     const ok = await confirm(t("host.deleteConfirmFull", { name: host.name }));
@@ -109,7 +113,7 @@ export default function Sidebar({
                   <div
                     key={p.value}
                     className={`proto-prefix-drop-item${protoFilter === p.value ? " active" : ""}`}
-                    onClick={() => { setProtoFilter(protoFilter === p.value ? "" : p.value); setProtoDropOpen(false); }}
+                    onClick={() => { setProtoFilter(p.value); setProtoDropOpen(false); }}
                   >
                     <span className="proto-drop-icon">{p.icon}</span>
                     <span>{p.label}</span>
@@ -139,7 +143,7 @@ export default function Sidebar({
           onEdit={onEditHost}
           onDelete={handleDelete}
           onNewHost={(pid, proto) => onNewHost(pid, proto)}
-          onNewFolder={(pid, name) => onNewFolder(pid, name)}
+          onNewFolder={(pid, name, protocol) => onNewFolder(pid, name, protocol)}
           onRename={handleRename}
           filter={filter}
           protoFilter={protoFilter}

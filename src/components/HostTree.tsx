@@ -9,7 +9,7 @@ interface Props {
   onEdit: (host: Host) => void;
   onDelete: (host: Host) => void;
   onNewHost: (parentId: string, protocol?: string) => void;
-  onNewFolder: (parentId: string, name: string) => void;
+  onNewFolder: (parentId: string, name: string, protocol?: string) => void;
   onRename: (id: string, name: string) => void;
   filter?: string;
   protoFilter?: string;
@@ -94,6 +94,9 @@ export default function HostTree({
   onNewFolderRef.current = onNewFolder;
 
   const showHostSubtitle = (host: Host) => !["Local", "WSL"].includes(host.protocol);
+  const activeProtocol = protoFilter || "SSH";
+  const folderBelongsToActiveProtocol = (host: Host) =>
+    host.protocol === "Folder" && ((host.ownerType || "SSH") === activeProtocol);
 
   useEffect(() => { renameInputRef.current?.select(); }, [renaming?.id]);
 
@@ -104,7 +107,7 @@ export default function HostTree({
       if (inlineFolderInputRef.current && !inlineFolderInputRef.current.contains(e.target as Node)) {
         const f = inlineFolderValueRef.current;
         setInlineFolder(null);
-        if (f?.name.trim()) onNewFolderRef.current(f.parentId, f.name.trim());
+        if (f?.name.trim()) onNewFolderRef.current(f.parentId, f.name.trim(), activeProtocol);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -186,6 +189,7 @@ export default function HostTree({
 
   function folderVisible(id: string): boolean {
     const folder = hosts.find((h) => h.id === id);
+    if (!folder || !folderBelongsToActiveProtocol(folder)) return false;
     if (!lf) return true;
     if (folder?.name.toLowerCase().includes(lf)) return true;
     return hosts.some((h) => !h.deleted && (
@@ -218,7 +222,7 @@ export default function HostTree({
   const commitInlineFolder = () => {
     const f = inlineFolderValueRef.current;
     setInlineFolder(null);
-    if (f?.name.trim()) onNewFolderRef.current(f.parentId, f.name.trim());
+    if (f?.name.trim()) onNewFolderRef.current(f.parentId, f.name.trim(), activeProtocol);
   };
 
   // ── Sorted children ────────────────────────────────────────────────────────
@@ -272,7 +276,9 @@ export default function HostTree({
 
   function renderNodes(parentId: string, depth: number): React.ReactNode {
     const children = getChildren(parentId)
-      .filter((h) => (lf || protoFilter) ? (h.protocol === "Folder" ? folderVisible(h.id) : hostMatches(h)) : true);
+      .filter((h) => (lf || protoFilter)
+        ? (h.protocol === "Folder" ? folderVisible(h.id) : hostMatches(h))
+        : true);
 
     const inlineInput = inlineFolder?.parentId === parentId ? (
       <div key="__inline_folder__" className="tree-row" style={{ paddingLeft: 8 + depth * 16 }}>

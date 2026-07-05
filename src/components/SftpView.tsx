@@ -9,6 +9,7 @@ import { t as i18nT, useT } from "../i18n";
 import { FtpFolderIcon, SmbFolderIcon, SshIcon, InboxEmptyIcon } from "./icons";
 import { toast } from "./Toast";
 import { ROOT_ID as TREE_ROOT, useTreeExpanded, toggleExpanded } from "../store/treeStore";
+import CustomSelect from "./CustomSelect";
 
 // ---------------------------------------------------------------------------
 // Native shell icon cache
@@ -16,8 +17,10 @@ import { ROOT_ID as TREE_ROOT, useTreeExpanded, toggleExpanded } from "../store/
 
 const _iconCache    = new Map<string, string | null>();
 const _iconInflight = new Map<string, Promise<string | null>>();
+const _isMac = /mac/i.test(navigator.platform || navigator.userAgent || "");
 
 function _iconKey(name: string, path: string): string {
+  if (_isMac) return path;
   const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
   return ["lnk", "exe", "msi", "url"].includes(ext) ? path : `ext:${ext}`;
 }
@@ -76,6 +79,31 @@ const _COLOR: Record<FileCategory, [string, string]> = {
 function SvgFileIcon({ name, isDir, isSymlink }: { name: string; isDir: boolean; isSymlink: boolean }) {
   const cat = _cat(name, isDir, isSymlink);
   const [fill, stroke] = _COLOR[cat];
+  if (_isMac) {
+    if (cat === "folder") return (
+      <svg width="18" height="15" viewBox="0 0 18 15" fill="none" style={{ flexShrink: 0 }}>
+        <path d="M1.25 4.2c0-1.52 1.23-2.75 2.75-2.75h2.6c.6 0 1.17.24 1.58.67l.88.92h4.97c1.52 0 2.75 1.23 2.75 2.75v5.9c0 1.52-1.23 2.75-2.75 2.75H4c-1.52 0-2.75-1.23-2.75-2.75V4.2Z" fill="#6fb2ff" fillOpacity="0.24" stroke="#8cc0ff" strokeWidth="1"/>
+        <path d="M1.9 5.4h14.2" stroke="#8cc0ff" strokeOpacity="0.55" strokeWidth="0.9"/>
+      </svg>
+    );
+    const arrow = cat === "shortcut" || cat === "symlink";
+    return (
+      <svg width="15" height="17" viewBox="0 0 15 17" fill="none" style={{ flexShrink: 0 }}>
+        <path d="M3.1 1.25h5.9l3.15 3.2v9.4A1.9 1.9 0 0 1 10.25 15.75h-7.1a1.9 1.9 0 0 1-1.9-1.9v-10.7a1.9 1.9 0 0 1 1.85-1.9Z" fill="#ffffff" fillOpacity="0.08" stroke="#b8c0d4" strokeWidth="0.95"/>
+        <path d="M9 1.25v2.4c0 .5.4.9.9.9h2.25" stroke="#b8c0d4" strokeWidth="0.9" strokeLinecap="round"/>
+        <line x1="3.6" y1="7.1" x2="10.9" y2="7.1" stroke={stroke} strokeWidth="0.85" strokeOpacity="0.55"/>
+        <line x1="3.6" y1="9.15" x2="10.9" y2="9.15" stroke={stroke} strokeWidth="0.85" strokeOpacity="0.55"/>
+        <line x1="3.6" y1="11.2" x2="8.4" y2="11.2" stroke={stroke} strokeWidth="0.85" strokeOpacity="0.55"/>
+        {arrow && (
+          <>
+            <rect x="1.2" y="11.1" width="5.2" height="4.5" rx="0.8" fill="var(--bg)"/>
+            <path d="M2.45 14.7v-2.25h2.2M4.65 14.7h-2.2" stroke={stroke} strokeWidth="0.95" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M3.2 13.9l1.45-1.45" stroke={stroke} strokeWidth="0.8" strokeLinecap="round"/>
+          </>
+        )}
+      </svg>
+    );
+  }
   if (cat === "folder") return (
     <svg width="17" height="14" viewBox="0 0 17 14" fill="none" style={{ flexShrink: 0 }}>
       <path d="M1 2.5C1 1.67 1.67 1 2.5 1H6.5L8 3H14.5C15.33 3 16 3.67 16 4.5V11.5C16 12.33 15.33 13 14.5 13H2.5C1.67 13 1 12.33 1 11.5V2.5Z"
@@ -104,7 +132,7 @@ function SvgFileIcon({ name, isDir, isSymlink }: { name: string; isDir: boolean;
 function FileTypeIcon({ path, name, isDir, isSymlink, nativeIcons }: {
   path: string; name: string; isDir: boolean; isSymlink: boolean; nativeIcons: boolean;
 }) {
-  const key = (!isDir && nativeIcons) ? _iconKey(name, path) : null;
+  const key = (nativeIcons && (_isMac || !isDir)) ? _iconKey(name, path) : null;
   const [imgUrl, setImgUrl] = useState<string | null>(() =>
     key ? (_iconCache.get(key) ?? null) : null
   );
@@ -1214,6 +1242,12 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
   const pickerProtoRef = useRef<HTMLDivElement>(null);
   // Use the live host list from App.tsx and drop soft-deleted entries.
   const pickerHosts = propHosts.filter(h => !h.deleted);
+
+  useEffect(() => {
+    if (pickerProtos.length > 0 && !pickerProtos.some((p) => p.value === pickerProtoFilter)) {
+      setPickerProtoFilter(pickerProtos[0].value);
+    }
+  }, [pickerProtoFilter, pickerProtos]);
 
   // ── Init: left pane = Desktop, right pane = empty ─────────────────────────
   useEffect(() => {
@@ -2944,7 +2978,7 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
                 data-tooltip={i18nT("sftp.picker.switchType")}
               >
                 <span className="proto-prefix-icon">
-                  {SFTP_PICKER_PROTOS.find(p => p.value === pickerProtoFilter)?.icon ?? "≡"}
+                  {SFTP_PICKER_PROTOS.find(p => p.value === pickerProtoFilter)?.icon ?? pickerProtos[0]?.icon ?? "≡"}
                 </span>
                 <span className="proto-prefix-arrow">▾</span>
               </button>
@@ -2954,7 +2988,7 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
                     <div
                       key={p.value}
                       className={`proto-prefix-drop-item${pickerProtoFilter === p.value ? " active" : ""}`}
-                      onClick={() => { setPickerProtoFilter(pickerProtoFilter === p.value ? "" : p.value); setPickerProtoDropOpen(false); }}
+                      onClick={() => { setPickerProtoFilter(p.value); setPickerProtoDropOpen(false); }}
                     >
                       <span className="proto-drop-icon">{p.icon}</span>
                       <span>{p.label}</span>
@@ -3074,12 +3108,15 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
               <div className="conflict-sep" />
               <div className="conflict-dlg-action-row">
                 <span className="conflict-dlg-field-lbl">{i18nT("sftp.conflict.action")}</span>
-                <select className="sctl conflict-action-sel"
+                <CustomSelect
+                  className="sctl conflict-action-sel"
                   value={conflictAction}
-                  onChange={e => setConflictAction(e.target.value as "overwrite" | "skip")}>
-                  <option value="overwrite">{i18nT("sftp.conflict.overwrite")}</option>
-                  <option value="skip">{i18nT("sftp.conflict.skip")}</option>
-                </select>
+                  onChange={(value) => setConflictAction(value as "overwrite" | "skip")}
+                  options={[
+                    { value: "overwrite", label: i18nT("sftp.conflict.overwrite") },
+                    { value: "skip", label: i18nT("sftp.conflict.skip") },
+                  ]}
+                />
                 <label className="conflict-apply-all">
                   <input type="checkbox" checked={conflictApplyAll}
                     onChange={e => setConflictApplyAll(e.target.checked)} />
@@ -3176,12 +3213,15 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
               {/* action row */}
               <div className="conflict-dlg-action-row">
                 <span className="conflict-dlg-field-lbl">{i18nT("sftp.conflict.action")}</span>
-                <select className="sctl conflict-action-sel"
+                <CustomSelect
+                  className="sctl conflict-action-sel"
                   value={conflictAction}
-                  onChange={e => setConflictAction(e.target.value as "overwrite" | "skip")}>
-                  <option value="overwrite">{i18nT("sftp.conflict.overwrite")}</option>
-                  <option value="skip">{i18nT("sftp.conflict.skip")}</option>
-                </select>
+                  onChange={(value) => setConflictAction(value as "overwrite" | "skip")}
+                  options={[
+                    { value: "overwrite", label: i18nT("sftp.conflict.overwrite") },
+                    { value: "skip", label: i18nT("sftp.conflict.skip") },
+                  ]}
+                />
                 <label className="conflict-apply-all">
                   <input type="checkbox" checked={conflictApplyAll}
                     onChange={e => setConflictApplyAll(e.target.checked)} />

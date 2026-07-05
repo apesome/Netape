@@ -7,6 +7,7 @@ import NameDialog from "./NameDialog";
 import { toast } from "./Toast";
 import { useAvailableProtocols } from "../protocols";
 import { useT } from "../i18n";
+import { InboxEmptyIcon } from "./icons";
 
 const OpenNewTabIcon = () => (
   <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -14,8 +15,6 @@ const OpenNewTabIcon = () => (
     <path fillRule="evenodd" clipRule="evenodd" d="M12.5 0C12.2239 0 12 0.223858 12 0.5V3H9.5C9.22386 3 9 3.22386 9 3.5C9 3.77614 9.22386 4 9.5 4H12V6.5C12 6.77614 12.2239 7 12.5 7C12.7761 7 13 6.77614 13 6.5V4H15.5C15.7761 4 16 3.77614 16 3.5C16 3.22386 15.7761 3 15.5 3H13V0.5C13 0.223858 12.7761 0 12.5 0Z"/>
   </svg>
 );
-
-const NO_FILTER = { icon: "≡", label: "" };
 
 const FolderGridIcon = () => (
   <svg width="17" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -39,7 +38,7 @@ interface Props {
   onEditHost: (host: Host) => void;
   onEditHostDrawer?: (host: Host) => void;
   onDeleteHost: () => void;
-  onNewFolder: (parentId: string, name: string) => void;
+  onNewFolder: (parentId: string, name: string, protocol?: string) => void;
   onRename: (id: string, name: string) => void;
   onOpenKeyManager: () => void;
   onOpenSettings: () => void;
@@ -106,11 +105,19 @@ export default function WelcomeTab({
     return () => document.removeEventListener("mousedown", fn);
   }, [gridCtx]);
 
-  const curProto = PROTO_OPTIONS.find((p) => p.value === protoFilter) ?? NO_FILTER;
+  useEffect(() => {
+    if (PROTO_OPTIONS.length > 0 && !PROTO_OPTIONS.some((p) => p.value === protoFilter)) {
+      setProtoFilter(PROTO_OPTIONS[0].value);
+    }
+  }, [PROTO_OPTIONS, protoFilter]);
+
+  const curProto = PROTO_OPTIONS.find((p) => p.value === protoFilter) ?? PROTO_OPTIONS[0];
   const showGrid = layoutMode === "Grid";
 
   const hostsById = new Map(hosts.map((h) => [h.id, h]));
   const isFolder = (h: Host) => h.protocol === "Folder";
+  const activeProtocol = protoFilter || "SSH";
+  const folderBelongsToActiveProtocol = (h: Host) => isFolder(h) && ((h.ownerType || "SSH") === activeProtocol);
   const queryLower = query.trim().toLowerCase();
   const currentGroup = currentGroupId === "0" ? null : hostsById.get(currentGroupId);
 
@@ -160,11 +167,17 @@ export default function WelcomeTab({
     const children = hosts.filter((h) => !h.deleted && (h.parentId ?? "0") === folderId);
     return children.some((h) => {
       if (isFolder(h)) {
-        return h.name.toLowerCase().includes(queryLower) || folderOrDescendantMatches(h.id);
+        if (!folderBelongsToActiveProtocol(h)) return false;
+        return (!!queryLower && h.name.toLowerCase().includes(queryLower)) || folderOrDescendantMatches(h.id);
       }
       return (!protoFilter || h.protocol === protoFilter)
         && [h.name, h.host, h.username, h.remark].some((v) => v.toLowerCase().includes(queryLower));
     });
+  };
+
+  const folderHasAnyDescendantHost = (folderId: string): boolean => {
+    const children = hosts.filter((h) => !h.deleted && (h.parentId ?? "0") === folderId);
+    return children.some((h) => !isFolder(h) || (folderBelongsToActiveProtocol(h) && folderHasAnyDescendantHost(h.id)));
   };
 
   const countHostsInFolder = (folderId: string): number => {
@@ -181,8 +194,8 @@ export default function WelcomeTab({
   };
 
   const childFolders = hosts
-    .filter((h) => !h.deleted && isFolder(h) && belongsToCurrentBranch(h))
-    .filter((h) => !protoFilter || folderOrDescendantMatches(h.id))
+    .filter((h) => !h.deleted && folderBelongsToActiveProtocol(h) && belongsToCurrentBranch(h))
+    .filter((h) => !protoFilter || folderOrDescendantMatches(h.id) || !folderHasAnyDescendantHost(h.id))
     .filter((h) => !queryLower || h.name.toLowerCase().includes(queryLower) || folderOrDescendantMatches(h.id))
     .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -271,10 +284,10 @@ export default function WelcomeTab({
               {protoDropOpen && (
                 <div className="proto-prefix-drop">
                   {PROTO_OPTIONS.map((p) => (
-                    <div
+                  <div
                       key={p.value}
                       className={`proto-prefix-drop-item${protoFilter === p.value ? " active" : ""}`}
-                      onClick={() => { setProtoFilter(protoFilter === p.value ? "" : p.value); setProtoDropOpen(false); }}
+                      onClick={() => { setProtoFilter(p.value); setProtoDropOpen(false); }}
                     >
                       <span className="proto-drop-icon">{p.icon}</span>
                       <span>{p.label}</span>
@@ -332,24 +345,28 @@ export default function WelcomeTab({
 
             <div className="welcome-tree welcome-grid-tree">
               {showGrid ? (
-                isGridEmpty ? (
-                  <div className="welcome-grid-empty">{query ? t("sftp.noMatchedHosts") : t("host.gridEmpty")}</div>
-                ) : (
-                  <div className="welcome-grid-panel">
-                    <div className="welcome-grid-breadcrumbs">
-                      {breadcrumbs.map((crumb, index) => (
-                        <div key={crumb.id} className="welcome-grid-crumb-wrap">
-                          {index > 0 && <span className="welcome-grid-crumb-sep"><CrumbChevron /></span>}
-                          <button
-                            type="button"
-                            className={`welcome-grid-crumb${crumb.id === currentGroupId ? " active" : ""}`}
-                            onClick={() => setCurrentGroupId(crumb.id)}
-                          >
-                            {crumb.name}
-                          </button>
-                        </div>
-                      ))}
+                <div className="welcome-grid-panel">
+                  <div className="welcome-grid-breadcrumbs">
+                    {breadcrumbs.map((crumb, index) => (
+                      <div key={crumb.id} className="welcome-grid-crumb-wrap">
+                        {index > 0 && <span className="welcome-grid-crumb-sep"><CrumbChevron /></span>}
+                        <button
+                          type="button"
+                          className={`welcome-grid-crumb${crumb.id === currentGroupId ? " active" : ""}`}
+                          onClick={() => setCurrentGroupId(crumb.id)}
+                        >
+                          {crumb.name}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {isGridEmpty ? (
+                    <div className="welcome-grid-empty">
+                      <InboxEmptyIcon />
+                      <div className="welcome-grid-empty-text">{query ? t("sftp.noMatchedHosts") : t("host.gridEmpty")}</div>
                     </div>
+                  ) : (
+                    <>
                     {childFolders.length > 0 && (
                       <div className="welcome-grid-section">
                         <div className="welcome-grid-section-head">
@@ -408,19 +425,20 @@ export default function WelcomeTab({
                     })}
                     </div>
                     </div>
-                  </div>
-                )
+                    </>
+                  )}
+                </div>
               ) : (
                 <HostTree
                   hosts={hosts}
                   onOpen={onOpenHost}
                   onEdit={onEditHost}
-                  onDelete={handleDelete}
-                  onNewHost={onNewHost}
-                  onNewFolder={onNewFolder}
-                  onRename={onRename}
-                  filter={query}
-                  protoFilter={protoFilter}
+          onDelete={handleDelete}
+          onNewHost={onNewHost}
+          onNewFolder={onNewFolder}
+          onRename={onRename}
+          filter={query}
+          protoFilter={protoFilter}
                 />
               )}
             </div>
@@ -519,8 +537,8 @@ export default function WelcomeTab({
           placeholder={t("host.groupDialog.namePlaceholder")}
           confirmText={t("host.groupDialog.confirm")}
           onClose={() => setNewChildFolderParent(null)}
-          onConfirm={(name) => {
-            onNewFolder(newChildFolderParent.id, name);
+            onConfirm={(name) => {
+            onNewFolder(newChildFolderParent.id, name, activeProtocol);
             setNewChildFolderParent(null);
             setCurrentGroupId(newChildFolderParent.id);
           }}
