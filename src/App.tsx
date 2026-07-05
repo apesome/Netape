@@ -374,6 +374,8 @@ export default function App() {
   const isMac = /mac/i.test(navigator.platform || navigator.userAgent || "");
   const macRestoreInFlightRef = useRef(false);
   const macExpandedRef = useRef(false);
+  const macExpandedTimerRef = useRef<number | null>(null);
+  const macSuppressExpandedUntilRef = useRef(0);
 
   // Tab bar — refs & state (effects registered after activeId below)
   const tabsScrollRef   = useRef<HTMLDivElement>(null);
@@ -706,6 +708,25 @@ export default function App() {
     let disposed = false;
     const unlistenFns: Array<() => void> = [];
 
+    const setMacExpandedStable = (expanded: boolean, delay = expanded ? 110 : 0) => {
+      if (!isMac || disposed) return;
+      if (macExpandedTimerRef.current !== null) {
+        window.clearTimeout(macExpandedTimerRef.current);
+        macExpandedTimerRef.current = null;
+      }
+      if (!expanded || delay <= 0) {
+        macExpandedRef.current = expanded;
+        setIsMacWindowExpanded(expanded);
+        return;
+      }
+      macExpandedTimerRef.current = window.setTimeout(() => {
+        macExpandedTimerRef.current = null;
+        if (disposed) return;
+        macExpandedRef.current = true;
+        setIsMacWindowExpanded(true);
+      }, delay);
+    };
+
     const syncWindowChromeState = async () => {
       try {
         const maximized = await win.isMaximized();
@@ -725,16 +746,16 @@ export default function App() {
 
         const workArea = monitor?.workArea;
         const tolerance = 14;
-        const expanded = !!workArea &&
+        const rawExpanded = !!workArea &&
           Math.abs(outerPos.x - workArea.position.x) <= tolerance &&
           Math.abs(outerPos.y - workArea.position.y) <= tolerance &&
           Math.abs(outerSize.width - workArea.size.width) <= tolerance &&
           Math.abs(outerSize.height - workArea.size.height) <= tolerance;
-
-        setIsMacWindowExpanded(expanded);
+        const expanded =
+          Date.now() < macSuppressExpandedUntilRef.current ? false : rawExpanded;
 
         const wasExpanded = macExpandedRef.current;
-        macExpandedRef.current = expanded;
+        setMacExpandedStable(expanded);
 
         if (
           wasExpanded &&
@@ -743,6 +764,8 @@ export default function App() {
           !macRestoreInFlightRef.current
         ) {
           macRestoreInFlightRef.current = true;
+          macSuppressExpandedUntilRef.current = Date.now() + 700;
+          setMacExpandedStable(false);
           try {
             await win.setSize(new LogicalSize(1024, 720));
             await win.center();
@@ -752,7 +775,7 @@ export default function App() {
             window.setTimeout(() => {
               macRestoreInFlightRef.current = false;
               void syncWindowChromeState();
-            }, 120);
+            }, 180);
           }
         }
       } catch {
@@ -786,6 +809,10 @@ export default function App() {
     window.addEventListener("resize", onResize);
     return () => {
       disposed = true;
+      if (macExpandedTimerRef.current !== null) {
+        window.clearTimeout(macExpandedTimerRef.current);
+        macExpandedTimerRef.current = null;
+      }
       window.removeEventListener("resize", onResize);
       for (const unlisten of unlistenFns) unlisten();
     };
