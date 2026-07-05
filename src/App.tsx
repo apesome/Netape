@@ -733,7 +733,10 @@ export default function App() {
         if (disposed) return;
 
         setIsWindowMaximized(maximized);
-        invoke("settings_set", { key: "app.wasMaximized", value: String(maximized) }).catch(() => {});
+        invoke("settings_set", {
+          key: "app.wasMaximized",
+          value: String(maximized),
+        }).catch(() => {});
 
         if (!isMac) return;
 
