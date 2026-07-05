@@ -8,6 +8,10 @@
 pub fn window_set_opacity(app: tauri::AppHandle, opacity: f64) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     win::apply(&app, opacity)?;
+
+    #[cfg(not(target_os = "windows"))]
+    let _ = (app, opacity);
+
     Ok(())
 }
 
