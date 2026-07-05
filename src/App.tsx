@@ -611,6 +611,7 @@ export default function App() {
 
   // Maximized state (tracked for icon/tooltip switching on the max/restore button)
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
+  const [isMacWindowExpanded, setIsMacWindowExpanded] = useState(false);
 
   // Split terminal: tabId → "H" (horizontal, two columns) | "V" (vertical, two rows)
   const [splitMap, setSplitMap] = useState<Record<string, "H" | "V">>({});
@@ -700,16 +701,25 @@ export default function App() {
   useEffect(() => {
     const win = getCurrentWindow();
     let ready = false;
+    const syncExpandedState = () => {
+      const expanded =
+        window.screenX <= 2 &&
+        window.screenY <= 2 &&
+        window.outerWidth >= window.screen.availWidth - 4;
+      setIsMacWindowExpanded(expanded);
+    };
     windowReady.finally(() => {
       ready = true;
       // Initialize icon state once the window is in its final position
       win.isMaximized().then(setIsWindowMaximized).catch(() => {});
+      syncExpandedState();
       // Restore host tree expanded state from DB
       void loadTreeExpanded();
     });
 
     const onResize = () => {
       if (!ready) return;
+      syncExpandedState();
       win.isMaximized().then(v => {
         invoke("settings_set", { key: "app.wasMaximized", value: String(v) }).catch(() => {});
         setIsWindowMaximized(v);
@@ -1732,7 +1742,7 @@ export default function App() {
             "tabbar",
             isMac ? "tabbar--macos" : "",
             layoutMode === "Fence" ? "tabbar--fence" : "",
-            isWindowMaximized ? "tabbar--maximized" : "",
+            isWindowMaximized || isMacWindowExpanded ? "tabbar--maximized" : "",
             layoutMode === "Fence" && !sidebarVisible ? "tabbar--sidebar-collapsed" : "",
           ].filter(Boolean).join(" ")}
           onMouseDown={handleTabbarMouseDown}
@@ -1752,7 +1762,7 @@ export default function App() {
           {/* Fixed home tab — always visible, never scrolls away */}
           {layoutMode !== "Fence" && (
             <div
-              className={`tab tab-home tab-home--fixed${activeId === WELCOME_ID ? " active" : ""}`}
+              className={`tab tab--pinned tab-home tab-home--fixed${activeId === WELCOME_ID ? " active" : ""}`}
               onClick={() => setActiveId(WELCOME_ID)}
               data-tooltip={t("app.tab.home")}
             >
