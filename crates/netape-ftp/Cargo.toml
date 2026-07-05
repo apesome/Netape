@@ -1,0 +1,17 @@
+[package]
+name = "netape-ftp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Installable FTP transfer plugin — a standalone sidecar binary that speaks
+# line-delimited JSON-RPC over stdio. Loaded at runtime by Netape's plugin host.
+
+[[bin]]
+name = "netape-ftp"
+path = "src/main.rs"
+
+[dependencies]
+suppaftp = "6"
+serde = { workspace = true }
+serde_json = { workspace = true }

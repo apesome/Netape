@@ -1,0 +1,45 @@
+[package]
+name = "Netape"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Netape - cross-platform terminal and SSH client built with Rust and Tauri"
+
+[lib]
+name = "netape_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-dialog = "2"
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+base64 = "0.22"
+encoding_rs = "0.8"
+
+netape-pty      = { path = "../crates/netape-pty" }
+netape-terminal = { path = "../crates/netape-terminal" }
+netape-protocol = { path = "../crates/netape-protocol" }
+netape-store    = { path = "../crates/netape-store" }
+netape-domain   = { path = "../crates/netape-domain" }
+
+tokio   = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "io-util"] }
+futures.workspace = true
+uuid.workspace = true
+dirs = "5"
+russh-sftp = { version = "2", default-features = false }
+png = "0.17"
+
+[target.'cfg(windows)'.dependencies]
+raw-window-handle = "0.6"
+winapi = { version = "0.3", features = [
+    "shellapi", "winuser", "wingdi", "windef", "minwindef", "utilapiset",
+] }

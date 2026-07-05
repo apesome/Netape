@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Netape</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #1e1e2e;
+      }
+      #loading-screen {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #1e1e2e;
+        z-index: 9999;
+        transition: opacity 0.25s ease;
+        gap: 18px;
+      }
+      #loading-screen.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .ld-logo {
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        color: #cdd6f4;
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+      .ld-ring {
+        width: 36px;
+        height: 36px;
+        border: 3px solid rgba(137,180,250,0.15);
+        border-top-color: #89b4fa;
+        border-radius: 50%;
+        animation: ld-spin 0.8s linear infinite;
+      }
+      @keyframes ld-spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading-screen">
+      <div class="ld-logo">Netape</div>
+      <div class="ld-ring"></div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

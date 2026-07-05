@@ -1,0 +1,34 @@
+[package]
+name = "netape-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# SSH, SFTP, proxy, and forwarding protocol support.
+# Implemented with `russh` and related async transport crates.
+#
+# Scope:
+#   - SSH connect / authenticate (password, public-key, keyboard-interactive)
+#   - Shell channel + PTY (open, write, resize)
+#   - Exec channel (run-a-command, capture stdout)
+#   - Port forwarding  (local / remote / dynamic)
+#   - Jump-host (bastion) chains
+#   - Proxy support (HTTP CONNECT, SOCKS5)
+#   - Known-hosts file verification
+
+[dependencies]
+russh       = { version = "0.61", default-features = false, features = ["ring", "flate2"] }
+russh-sftp  = { version = "2", default-features = false }
+tokio       = { version = "1", features = ["full"] }
+tokio-socks = "0.5"
+base64      = "0.22"
+rand        = "0.10"
+
+netape-domain = { path = "../netape-domain" }
+dirs.workspace = true
+
+serde.workspace     = true
+serde_json.workspace = true
+anyhow.workspace    = true
+thiserror.workspace = true
+tracing.workspace   = true

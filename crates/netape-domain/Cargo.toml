@@ -1,0 +1,16 @@
+[package]
+name = "netape-domain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Domain models plus their lightweight manager-style CRUD facades.
+
+[dependencies]
+netape-store = { path = "../netape-store" }
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true

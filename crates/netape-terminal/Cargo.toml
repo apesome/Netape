@@ -1,0 +1,12 @@
+[package]
+name = "netape-terminal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Terminal foundation types, including shared screen and input state.
+# VT parsing is still handled by xterm.js in the frontend, while this crate
+# keeps the core model ready for future native expansion.
+
+[dependencies]
+serde.workspace = true

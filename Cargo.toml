@@ -1,0 +1,34 @@
+# Netape workspace for the Rust + Tauri application.
+#
+# Each crate owns a focused slice of the application runtime and data model.
+[workspace]
+resolver = "2"
+members = [
+    "src-tauri",
+    "crates/netape-pty",
+    "crates/netape-terminal",
+    "crates/netape-store",
+    "crates/netape-domain",
+    "crates/netape-protocol",
+    "crates/netape-ftp",
+    "crates/netape-smb",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/your-org/netape"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+portable-pty = "0.9"
+uuid = { version = "1", features = ["v4"] }
+once_cell = "1"
+parking_lot = "0.12"
+dirs = "5"
+futures = "0.3"
