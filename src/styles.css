@@ -6416,6 +6416,50 @@ input[type="number"].hf-ctrl {
 .sys-retry-btn { display: block; margin-top: 8px; color: var(--fg-dim); font-size: 11px; cursor: pointer; background: none; border: none; padding: 0; text-decoration: underline; }
 .sys-retry-btn:hover { color: var(--fg); }
 .sys-retry-btn--inline { display: inline; margin-top: 0; margin-left: auto; flex-shrink: 0; }
+.sys-empty-state {
+  min-height: 240px;
+  padding: 28px 18px 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--fg-dim);
+}
+.sys-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  opacity: 0.7;
+}
+.sys-empty-icon--error { color: var(--danger); opacity: 0.78; }
+.sys-empty-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 8px;
+}
+.sys-empty-detail {
+  max-width: 320px;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--fg-dim);
+}
+.sys-empty-retry {
+  margin-top: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity 0.12s, color 0.12s;
+}
+.sys-empty-retry:hover { opacity: 0.82; color: var(--accent); }
 
 /* Renice dialog */
 .sys-renice-overlay {

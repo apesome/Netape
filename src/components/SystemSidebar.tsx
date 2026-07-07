@@ -53,6 +53,46 @@ function fmtKb(kb: number) {
   return `${kb} KB`;
 }
 
+type SysErrorKind = "process" | "docker";
+
+function summarizeSystemError(kind: SysErrorKind, error: string) {
+  const msg = String(error || "").trim();
+  const lower = msg.toLowerCase();
+
+  if (kind === "docker") {
+    if (
+      lower.includes("permission denied") ||
+      lower.includes("docker daemon sock") ||
+      lower.includes("sudoers")
+    ) {
+      return {
+        title: i18nT("docker.error.permissionTitle"),
+        detail: i18nT("docker.error.permissionDetail"),
+      };
+    }
+    return {
+      title: i18nT("docker.error.unavailableTitle"),
+      detail: i18nT("docker.error.unavailableDetail"),
+    };
+  }
+
+  if (
+    lower.includes("permission denied") ||
+    lower.includes("operation not permitted") ||
+    lower.includes("sudoers")
+  ) {
+    return {
+      title: i18nT("sys.process.error.permissionTitle"),
+      detail: i18nT("sys.process.error.permissionDetail"),
+    };
+  }
+
+  return {
+    title: i18nT("sys.process.error.unavailableTitle"),
+    detail: i18nT("sys.process.error.unavailableDetail"),
+  };
+}
+
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
 const IcSearch = () => (
@@ -115,6 +155,34 @@ const IcLayers = () => (
     <path d="M1 13l7 3 7-3"/>
   </svg>
 );
+const IcBlocked = () => (
+  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="8.5"/>
+    <path d="M15.5 8.5l-7 7"/>
+  </svg>
+);
+
+function SysErrorState({
+  kind,
+  error,
+  onRetry,
+}: {
+  kind: SysErrorKind;
+  error: string;
+  onRetry: () => void;
+}) {
+  const summary = summarizeSystemError(kind, error);
+  return (
+    <div className="sys-empty-state">
+      <div className="sys-empty-icon sys-empty-icon--error"><IcBlocked /></div>
+      <div className="sys-empty-title">{summary.title}</div>
+      <div className="sys-empty-detail">{summary.detail}</div>
+      <button className="sys-empty-retry" onClick={onRetry}>
+        <IcRestart /> {i18nT("sys.retry")}
+      </button>
+    </div>
+  );
+}
 
 // ── Shared small components ───────────────────────────────────────────────────
 
@@ -332,10 +400,7 @@ function ProcessPanel({ sessionId }: { sessionId?: string }) {
           <div className="sys-hint">{i18nT("sys.loading.processes")}</div>
         )}
         {error && (
-          <div className="sys-error">
-            {error}
-            <button className="sys-retry-btn" onClick={doRefresh}>{i18nT("sys.retry")}</button>
-          </div>
+          <SysErrorState kind="process" error={error} onRetry={doRefresh} />
         )}
         {!loading && !error && visible.length === 0 && procs.length > 0 && (
           <div className="sys-hint">{i18nT("sys.noMatch.processes")}</div>
@@ -526,10 +591,7 @@ function DockerContainersPanel({ sessionId }: { sessionId?: string }) {
           <div className="sys-hint">{i18nT("docker.loading.containers")}</div>
         )}
         {error && (
-          <div className="sys-error">
-            {error}
-            <button className="sys-retry-btn" onClick={doRefresh}>{i18nT("sys.retry")}</button>
-          </div>
+          <SysErrorState kind="docker" error={error} onRetry={doRefresh} />
         )}
         {!loading && !error && containers.length === 0 && (
           <div className="sys-hint">{i18nT("docker.empty.containers")}</div>
@@ -686,10 +748,7 @@ function DockerImagesPanel({ sessionId }: { sessionId?: string }) {
           <div className="sys-hint">{i18nT("docker.loading.images")}</div>
         )}
         {error && (
-          <div className="sys-error">
-            {error}
-            <button className="sys-retry-btn" onClick={doRefresh}>{i18nT("sys.retry")}</button>
-          </div>
+          <SysErrorState kind="docker" error={error} onRetry={doRefresh} />
         )}
         {!loading && !error && images.length === 0 && (
           <div className="sys-hint">{i18nT("docker.empty.images")}</div>

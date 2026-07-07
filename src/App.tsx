@@ -1024,6 +1024,10 @@ export default function App() {
       const mode = value === "Screen" || value === "Grid" ? value : "Fence";
       setLayoutMode(mode);
       setSidebarVisible(mode === "Fence");
+      if (showHostDialog && hostDialogMode === "drawer") {
+        setShowHostDialog(false);
+        setHostDialogMode("dialog");
+      }
     }
     // Terminal font/size/cursor → update live
     if (key === "Setting.Terminal.font") {
@@ -1070,7 +1074,7 @@ export default function App() {
     if (key === "Setting.SFTP.clearDone") {
       setSftpSettings((p) => ({ ...p, clearDone: value === "true" }));
     }
-  }, [applyTheme, applyOpacity]);
+  }, [applyTheme, applyOpacity, showHostDialog, hostDialogMode]);
 
   // ---------------------------------------------------------------------------
   // Sidebar resize
@@ -1660,7 +1664,6 @@ export default function App() {
                 onOpenHost={openHost}
                 onNewHost={openNewHost}
                 onNewHostDrawer={(pid, proto) => openNewHost(pid, proto, "drawer")}
-                onNewRootGroup={() => setShowNewGroupDialog(true)}
                 onEditHost={openEditHost}
                 onEditHostDrawer={openEditHostDrawer}
                 onDeleteHost={handleHostDeleted}

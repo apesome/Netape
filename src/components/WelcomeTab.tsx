@@ -34,7 +34,6 @@ interface Props {
   onOpenHost: (host: Host) => void;
   onNewHost: (parentId?: string, protocol?: string) => void;
   onNewHostDrawer?: (parentId?: string, protocol?: string) => void;
-  onNewRootGroup?: () => void;
   onEditHost: (host: Host) => void;
   onEditHostDrawer?: (host: Host) => void;
   onDeleteHost: () => void;
@@ -51,7 +50,6 @@ export default function WelcomeTab({
   onOpenHost,
   onNewHost,
   onNewHostDrawer,
-  onNewRootGroup,
   onEditHost,
   onEditHostDrawer,
   onDeleteHost,
@@ -67,7 +65,7 @@ export default function WelcomeTab({
   const [currentGroupId, setCurrentGroupId] = useState("0");
   const [gridCtx, setGridCtx] = useState<null | { x: number; y: number; kind: "folder" | "host"; item: Host }>(null);
   const [renameTarget, setRenameTarget] = useState<Host | null>(null);
-  const [newChildFolderParent, setNewChildFolderParent] = useState<Host | null>(null);
+  const [newFolderTarget, setNewFolderTarget] = useState<{ parentId: string; nextGroupId?: string } | null>(null);
   const protoBadgeRef = useRef<HTMLDivElement>(null);
   const emptyNewMenuRef = useRef<HTMLDivElement>(null);
   const gridCtxRef = useRef<HTMLDivElement>(null);
@@ -120,6 +118,7 @@ export default function WelcomeTab({
   const folderBelongsToActiveProtocol = (h: Host) => isFolder(h) && ((h.ownerType || "SSH") === activeProtocol);
   const queryLower = query.trim().toLowerCase();
   const currentGroup = currentGroupId === "0" ? null : hostsById.get(currentGroupId);
+  const createParentId = showGrid ? currentGroupId : "0";
 
   useEffect(() => {
     if (currentGroupId !== "0" && (!currentGroup || currentGroup.deleted || !isFolder(currentGroup))) {
@@ -323,7 +322,7 @@ export default function WelcomeTab({
                       className="welcome-grid-new-item"
                       onClick={() => {
                         setEmptyNewMenuOpen(false);
-                        (onNewHostDrawer ?? onNewHost)(undefined, protoFilter || "SSH");
+                        (onNewHostDrawer ?? onNewHost)(createParentId, protoFilter || "SSH");
                       }}
                     >
                       {t("host.newHost")}
@@ -333,7 +332,10 @@ export default function WelcomeTab({
                       className="welcome-grid-new-item"
                       onClick={() => {
                         setEmptyNewMenuOpen(false);
-                        onNewRootGroup?.();
+                        setNewFolderTarget({
+                          parentId: createParentId,
+                          nextGroupId: createParentId === "0" ? undefined : createParentId,
+                        });
                       }}
                     >
                       {t("host.newGroup")}
@@ -469,7 +471,7 @@ export default function WelcomeTab({
               <div
                 className="ctx-item"
                 onClick={() => {
-                  setNewChildFolderParent(gridCtx.item);
+                  setNewFolderTarget({ parentId: gridCtx.item.id, nextGroupId: gridCtx.item.id });
                   setGridCtx(null);
                 }}
               >
@@ -531,16 +533,16 @@ export default function WelcomeTab({
           }}
         />
       )}
-      {newChildFolderParent && (
+      {newFolderTarget && (
         <NameDialog
           title={t("host.newFolderPlaceholder")}
           placeholder={t("host.groupDialog.namePlaceholder")}
           confirmText={t("host.groupDialog.confirm")}
-          onClose={() => setNewChildFolderParent(null)}
-            onConfirm={(name) => {
-            onNewFolder(newChildFolderParent.id, name, activeProtocol);
-            setNewChildFolderParent(null);
-            setCurrentGroupId(newChildFolderParent.id);
+          onClose={() => setNewFolderTarget(null)}
+          onConfirm={(name) => {
+            onNewFolder(newFolderTarget.parentId, name, activeProtocol);
+            if (newFolderTarget.nextGroupId) setCurrentGroupId(newFolderTarget.nextGroupId);
+            setNewFolderTarget(null);
           }}
         />
       )}

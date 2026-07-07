@@ -539,6 +539,16 @@ function permsToOctal(perms: string): string {
   return `${b(s[0],s[1],s[2])}${b(s[3],s[4],s[5])}${b(s[6],s[7],s[8])}`;
 }
 
+function compactErrorMessage(error: unknown): string {
+  const raw = String(error).trim();
+  const suffix = ": permission denied";
+  if (raw.toLowerCase().endsWith(suffix)) {
+    const head = raw.slice(0, -suffix.length).trimEnd();
+    if (head.toLowerCase().endsWith("permission denied")) return head;
+  }
+  return raw;
+}
+
 function isRoot(path: string): boolean {
   return path === "/" || /^[A-Za-z]:\\?$/.test(path);
 }
@@ -1280,7 +1290,7 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
     path:    string,
     sftpId:  string | undefined,
     setTabs: React.Dispatch<React.SetStateAction<PaneTab[]>>,
-  ) => {
+  ): Promise<boolean> => {
     setTabs(prev => prev.map(t => t.id === tabId ? { ...t, loading: true } : t));
     try {
       const entries = sftpId
@@ -1291,19 +1301,17 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
           ? { ...t, loading: false, entries, path, input: path, selected: new Set() }
           : t
       ));
+      return true;
     } catch (err) {
-      if (sftpId) toast(i18nT("sftp.error.loadDir", { error: String(err) }), "error");
-      setTabs(prev => prev.map(t =>
-        t.id === tabId
-          ? { ...t, loading: false, ...(sftpId ? { connected: false } : {}) }
-          : t
-      ));
+      if (sftpId) toast(i18nT("sftp.error.loadDir", { error: compactErrorMessage(err) }), "error");
+      setTabs(prev => prev.map(t => t.id === tabId ? { ...t, loading: false } : t));
+      return false;
     }
   }, []);
 
   // ── History navigation ────────────────────────────────────────────────────
 
-  const navigateTo = useCallback((
+  const navigateTo = useCallback(async (
     tabId:   string,
     path:    string,
     setTabs: React.Dispatch<React.SetStateAction<PaneTab[]>>,
@@ -1311,14 +1319,18 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
   ) => {
     const tab = tabsRef.current.find(t => t.id === tabId);
     if (!tab) return;
+    const ok = await loadDir(tabId, path, tab.sftpId, setTabs);
+    if (!ok) {
+      setTabs(prev => prev.map(t => t.id === tabId ? { ...t, input: t.path, editingInput: false } : t));
+      return;
+    }
     const newHist = [...tab.history.slice(0, tab.histIdx + 1), path];
     setTabs(prev => prev.map(t => t.id === tabId
       ? { ...t, history: newHist, histIdx: newHist.length - 1, input: path, editingInput: false }
       : t));
-    loadDir(tabId, path, tab.sftpId, setTabs);
   }, [loadDir]);
 
-  const goBack = useCallback((
+  const goBack = useCallback(async (
     tabId:   string,
     setTabs: React.Dispatch<React.SetStateAction<PaneTab[]>>,
     tabsRef: React.MutableRefObject<PaneTab[]>,
@@ -1327,11 +1339,12 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
     if (!tab || tab.histIdx === 0) return;
     const newIdx = tab.histIdx - 1;
     const path   = tab.history[newIdx];
+    const ok = await loadDir(tabId, path, tab.sftpId, setTabs);
+    if (!ok) return;
     setTabs(prev => prev.map(t => t.id === tabId ? { ...t, histIdx: newIdx, input: path } : t));
-    loadDir(tabId, path, tab.sftpId, setTabs);
   }, [loadDir]);
 
-  const goForward = useCallback((
+  const goForward = useCallback(async (
     tabId:   string,
     setTabs: React.Dispatch<React.SetStateAction<PaneTab[]>>,
     tabsRef: React.MutableRefObject<PaneTab[]>,
@@ -1340,18 +1353,19 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
     if (!tab || tab.histIdx >= tab.history.length - 1) return;
     const newIdx = tab.histIdx + 1;
     const path   = tab.history[newIdx];
+    const ok = await loadDir(tabId, path, tab.sftpId, setTabs);
+    if (!ok) return;
     setTabs(prev => prev.map(t => t.id === tabId ? { ...t, histIdx: newIdx, input: path } : t));
-    loadDir(tabId, path, tab.sftpId, setTabs);
   }, [loadDir]);
 
-  const goHome = useCallback((
+  const goHome = useCallback(async (
     tabId:   string,
     setTabs: React.Dispatch<React.SetStateAction<PaneTab[]>>,
     tabsRef: React.MutableRefObject<PaneTab[]>,
   ) => {
     const tab = tabsRef.current.find(t => t.id === tabId);
     if (!tab) return;
-    navigateTo(tabId, tab.homePath, setTabs, tabsRef);
+    await navigateTo(tabId, tab.homePath, setTabs, tabsRef);
   }, [navigateTo]);
 
   // ── Column resize (per pane) ──────────────────────────────────────────────
