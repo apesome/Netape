@@ -8,6 +8,14 @@
 
 Netape is under active development. Windows, macOS, and Linux are target platforms; installers and supported architectures depend on the release. Check [Releases](https://github.com/apesome/Netape/releases) for published packages, or build from source.
 
+| Platform | Architecture | Package |
+| --- | --- | --- |
+| Windows | x64 | EXE installer |
+| macOS | Intel x64 / Apple Silicon ARM64 | DMG |
+| Linux | x64 / ARM64 | DEB / AppImage |
+
+Download from [v1.0.0](https://github.com/apesome/Netape/releases/tag/v1.0.0); choose the architecture matching your computer. Linux x64 targets Ubuntu 22.04+, ARM64 targets Ubuntu 24.04+; WebKitGTK 4.1 is required. macOS packages are not Developer ID signed or notarized. Each download has a SHA-256 checksum; macOS/Linux packages also include a source commit manifest. Native builds are checked in CI; interactive desktop behavior still needs testing on each system.
+
 ## Features
 
 | Area | What you can do |
@@ -93,7 +101,7 @@ The marketplace supports a **signed HTTPS catalog** and target-specific download
 
 For development, `NETAPE_PLUGIN_CATALOG` points to a local catalog with one subfolder per plugin. The app also looks for `plugins-dist/` beside its executable, then in the source tree. This folder is ignored by Git and is not automatically included in an installer.
 
-Windows x64 FTP and SMB packages and the [signed catalog](https://apesome.github.io/Netape/plugins/v1/index.json) are published. The [plugin guide](docs/plugin-distribution.md) explains signing and packaging; the [GitHub release guide](docs/github-release.md) covers manual and automated releases. FTP and SMB remain in this repository with independent versions.
+FTP packages cover Windows x64, macOS Intel/Apple Silicon and Linux x64/ARM64. SMB is Windows x64 only. The [signed catalog](https://apesome.github.io/Netape/plugins/v1/index.json) selects the matching package automatically. The [plugin guide](docs/plugin-distribution.md) explains signing and packaging; the [GitHub release guide](docs/github-release.md) covers manual and automated releases. FTP and SMB remain in this repository with independent versions.
 
 ## Project layout
 

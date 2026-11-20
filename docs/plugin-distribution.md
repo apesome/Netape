@@ -2,7 +2,7 @@
 
 [中文 README](../README.zh-CN.md) · [English README](../README.md)
 
-客户端已支持签名 HTTPS 索引、按 Rust target 选择包、下载进度与取消、SHA-256 校验、安全解压、暂存替换及离线缓存。本地安装继续保留。Windows x64 GNU 的 FTP `1.1.0`、SMB `1.0.0` 已上传至 [Releases](https://github.com/apesome/Netape/releases)，签名索引已部署至 GitHub Pages。
+客户端已支持签名 HTTPS 索引、按 Rust target 选择包、下载进度与取消、SHA-256 校验、安全解压、暂存替换及离线缓存。本地安装继续保留。FTP `1.1.0` 提供 Windows x64 GNU、macOS x64 / ARM64、Linux x64 / ARM64；SMB `1.0.0` 仅提供 Windows x64 GNU。归档见 [Releases](https://github.com/apesome/Netape/releases)，签名索引部署至 GitHub Pages。
 
 ## 是否拆仓库
 
@@ -98,6 +98,6 @@ cargo run -p netape-plugin-package --example verify_online -- config/plugin-mark
 
 ## English summary
 
-Netape supports a signed HTTPS catalog, exact Rust-target selection, bounded downloads with progress/cancellation, SHA-256 verification, safe ZIP/tar.gz extraction, staged replacement, rollback and verified offline cache. Local installation remains available. Windows x64 GNU packages and the signed GitHub Pages catalog are published. See [GitHub releases](github-release.md) for the repeatable build and publication workflow.
+Netape supports a signed HTTPS catalog, exact Rust-target selection, bounded downloads with progress/cancellation, SHA-256 verification, safe ZIP/tar.gz extraction, staged replacement, rollback and verified offline cache. Local installation remains available. FTP supports Windows x64 GNU, macOS x64/ARM64 and Linux x64/ARM64; SMB is Windows x64 GNU only. See [GitHub releases](github-release.md) for the repeatable build and publication workflow.
 
 Keep FTP/SMB in this repository for now, with independent versions and release tags. Their stdio JSON-RPC boundary permits a later move to `netape-plugins` without changing client trust/index configuration. Use the publishing script above to build archives, collect notices, merge targets and sign exact catalog bytes. The private key stays outside the repository; only its public key is embedded. Publish tested archives and matching AGPL source first, then deploy the signed index.

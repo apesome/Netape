@@ -6,6 +6,14 @@
 
 Netape は [apesome](https://github.com/apesome) が開発するターミナル・SSH クライアントです。Rust、Tauri 2、React、TypeScript を採用し、Windows・macOS・Linux を対象に開発しています。現在は開発段階のため、インストーラーの提供状況は各リリースをご確認ください。
 
+| OS | アーキテクチャ | パッケージ |
+| --- | --- | --- |
+| Windows | x64 | EXE |
+| macOS | Intel x64 / Apple Silicon ARM64 | DMG |
+| Linux | x64 / ARM64 | DEB / AppImage |
+
+[v1.0.0](https://github.com/apesome/Netape/releases/tag/v1.0.0) から対応するものを選んでください。Linux x64 は Ubuntu 22.04、ARM64 は Ubuntu 24.04 を基準とし、WebKitGTK 4.1 が必要です。macOS は Developer ID 署名・公証未対応です。SHA-256 と、macOS/Linux 向けのソースコミット情報を同梱しています。CI はネイティブビルドとパッケージを確認し、デスクトップ上の対話操作は未検証です。
+
 ## 主な機能
 
 | 分野 | 現在の機能 |
@@ -71,7 +79,7 @@ node --test tests/*.test.mjs
 
 署名付き HTTPS 一覧、環境別ダウンロード、進捗、キャンセル、検証付きインストールに対応しました。ローカルからの追加も利用できます。プラグインは `plugin.json` と JSON-RPC で通信する独立した実行ファイルで構成され、SMB は Windows 専用です。
 
-Windows x64 向けの FTP・SMB パッケージと[署名付き一覧](https://apesome.github.io/Netape/plugins/v1/index.json)を公開しています。[プラグイン公開手順](docs/plugin-distribution.md)と [GitHub リリース手順](docs/github-release.md)をご覧ください。当面は同じリポジトリ内でプラグインごとにバージョン管理します。
+FTP は Windows x64、macOS Intel / Apple Silicon、Linux x64 / ARM64 に対応し、SMB は Windows x64 のみ対応します。[署名付き一覧](https://apesome.github.io/Netape/plugins/v1/index.json)から対応パッケージを自動選択します。[プラグイン公開手順](docs/plugin-distribution.md)と [GitHub リリース手順](docs/github-release.md)をご覧ください。同じリポジトリ内でプラグインごとにバージョン管理します。
 
 [Issues](https://github.com/apesome/Netape/issues)には OS、アプリのバージョン、再現手順、機密情報を除いたログを添えてください。パスワードや秘密鍵は投稿しないでください。
 

@@ -8,6 +8,14 @@
 
 项目正在持续开发，面向 Windows、macOS 和 Linux。安装包与架构支持以实际发行版本为准；可在[发行页面](https://github.com/apesome/Netape/releases)查看，尚无对应安装包时可从源码构建。
 
+| 平台 | 架构 | 安装包 |
+| --- | --- | --- |
+| Windows | x64 | EXE 安装器 |
+| macOS | Intel x64 / Apple Silicon ARM64 | DMG |
+| Linux | x64 / ARM64 | DEB / AppImage |
+
+在 [v1.0.0 下载页面](https://github.com/apesome/Netape/releases/tag/v1.0.0)选择匹配架构。Linux x64 基于 Ubuntu 22.04，ARM64 基于 Ubuntu 24.04，需要 WebKitGTK 4.1。macOS 安装包暂未配置 Developer ID 签名和公证。下载附带 SHA-256；macOS / Linux 还提供各平台源码提交记录。CI 已检查原生编译和打包，各系统的桌面交互仍需实际使用验证。
+
 ## 功能概览
 
 | 功能 | 当前支持 |
@@ -93,7 +101,7 @@ cargo +stable-x86_64-pc-windows-gnu run
 
 开发时可通过 `NETAPE_PLUGIN_CATALOG` 指定本地插件目录，每个插件一个子目录。程序还会依次查找可执行文件旁和源码根目录中的 `plugins-dist/`。该目录被 Git 忽略，现有桌面打包配置也不会自动携带其内容。
 
-Windows x64 的 FTP、SMB 插件包与[签名索引](https://apesome.github.io/Netape/plugins/v1/index.json)已上线，可在设置中在线安装。详见[插件发布指南](docs/plugin-distribution.md)和 [GitHub 打包发布指南](docs/github-release.md)。FTP、SMB 暂时同仓库维护、独立版本发布，以后可迁入独立插件仓库。
+FTP 支持 Windows x64、macOS Intel / Apple Silicon、Linux x64 / ARM64；SMB 仅支持 Windows x64。[签名索引](https://apesome.github.io/Netape/plugins/v1/index.json)会自动匹配当前平台，可在设置中在线安装。详见[插件发布指南](docs/plugin-distribution.md)和 [GitHub 打包发布指南](docs/github-release.md)。FTP、SMB 同仓库维护、独立版本发布。
 
 ## 项目结构
 

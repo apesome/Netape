@@ -1,6 +1,6 @@
 # GitHub 创建、打包与发布
 
-仓库：<https://github.com/apesome/Netape>。主程序、FTP、SMB 同仓库维护，独立版本发布。当前自动打包目标为 Windows x64 GNU；macOS、Linux 不会生成未经验证的安装包。CI 固定使用本机已验证的 Rust `1.95.0`，避免新版 Cargo 构建目录变化影响当前 Tauri 构建依赖；升级工具链时先运行仅构建验证。
+仓库：<https://github.com/apesome/Netape>。主程序、FTP、SMB 同仓库维护，独立版本发布。Windows 使用 x64 GNU；macOS 和 Linux 使用独立原生 runner 构建 x64、ARM64。CI 固定使用 Rust `1.95.0`，避免新版 Cargo 构建目录变化影响当前 Tauri 构建依赖；升级工具链时先运行仅构建验证。
 
 应用从 `1.0.0` 开始发布，首个发行标签为 `v1.0.0`。安装包同时包含项目许可证和合并后的第三方许可文件。
 
@@ -22,9 +22,24 @@
 - 插件标签：`plugin-ftp-v<版本>`、`plugin-smb-v<版本>`，包含归档和 SHA-256。
 - GitHub Pages：`https://apesome.github.io/Netape/plugins/v1/index.json` 及 `.sig`。
 
-已有应用 Release 不会覆盖；请提升应用版本。已有插件归档也不会覆盖；新增平台时请提升插件版本。Release 标签指向构建时的源码提交。构建产物还会保存在该次 Actions 的 artifacts 中，便于排查。
+已有应用安装包、插件归档不会覆盖；相同名称必须具有相同 SHA-256。修改代码后发布新包时必须提升版本。首次补齐此前缺失的平台可使用下述追加流程。Release 标签对应原始源码提交；后补平台另外附带具体源码提交记录。构建产物还会保存在该次 Actions 的 artifacts 中，便于排查。
 
-安装器暂未配置 Windows Authenticode 签名。FTP/SMB 在线目录按完整 Rust target 匹配；当前为 `x86_64-pc-windows-gnu`。
+安装器暂未配置 Windows Authenticode 签名。FTP/SMB 在线目录按完整 Rust target 匹配；SMB 仅支持 `x86_64-pc-windows-gnu`。
+
+## macOS 和 Linux 发布
+
+先完成 Windows 发布以创建应用 Release 和插件 Release，再运行 **Actions → Publish macOS and Linux release**。四个目标全部构建成功后才执行发布；取消 `publish` 仅保留构建产物。
+
+| Runner | Rust target | 安装格式 |
+| --- | --- | --- |
+| macos-15-intel | x86_64-apple-darwin | DMG |
+| macos-15 | aarch64-apple-darwin | DMG |
+| ubuntu-22.04 | x86_64-unknown-linux-gnu | DEB、AppImage |
+| ubuntu-24.04-arm | aarch64-unknown-linux-gnu | DEB、AppImage |
+
+发布器验证每个平台的源码提交、版本、文件大小及 SHA-256，向当前应用 Release 追加安装器、校验文件和 `.build.json` 源码记录。FTP 向同版本插件 Release 追加缺失的平台，任何已存在归档都必须字节一致；SMB 不扩展到非 Windows。合并目录时保留 Windows 记录，重新签名后更新 Release 的 `index.json` / `.sig` 并部署 Pages。仅该可续期目录允许替换，安装器和插件包不会覆盖。
+
+Linux x64 以 Ubuntu 22.04 为基础，ARM64 以 Ubuntu 24.04 为基础，需要 WebKitGTK 4.1。macOS 安装包未使用 Developer ID 签名或公证。CI 检查原生编译和打包，不等同于在各系统上完成交互式终端、SSH 和文件传输测试。
 
 ## 本地发布
 
