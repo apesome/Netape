@@ -1,0 +1,55 @@
+name: Deploy published plugin catalog
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: netape-publish
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Download the latest app release catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p site/plugins/v1
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern index.json --pattern index.json.sig --dir site/plugins/v1
+          touch site/.nojekyll
+      - name: Verify catalog signature and expiration
+        run: |
+          node --input-type=module <<'JS'
+          import {readFileSync} from 'node:fs';
+          import {createPublicKey, verify} from 'node:crypto';
+          const trust = JSON.parse(readFileSync('config/plugin-market.json', 'utf8'));
+          const bytes = readFileSync('site/plugins/v1/index.json');
+          const index = JSON.parse(bytes);
+          const signature = JSON.parse(readFileSync('site/plugins/v1/index.json.sig', 'utf8'));
+          const hex = trust.keys[signature.keyId];
+          if (!hex) throw new Error('Unknown signing key');
+          const key = createPublicKey({key:Buffer.from('302a300506032b6570032100'+hex,'hex'),format:'der',type:'spki'});
+          if (!verify(null,bytes,key,Buffer.from(signature.signature,'base64'))) throw new Error('Invalid signature');
+          if (index.schemaVersion !== 1 || index.expiresAt*1000 <= Date.now()) throw new Error('Invalid or expired catalog');
+          console.log('Verified signed release catalog');
+          JS
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Deploy signed catalog
+        id: deployment
+        uses: actions/deploy-pages@v4

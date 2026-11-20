@@ -1,0 +1,401 @@
+{
+  "providers": [
+    {
+      "name": "Anthropic",
+      "baseUrl": "",
+      "anthropicUrl": "https://api.anthropic.com"
+    },
+    {
+      "name": "OpenAI",
+      "baseUrl": "https://api.openai.com/v1",
+      "anthropicUrl": ""
+    },
+    {
+      "name": "Google Gemini",
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "anthropicUrl": ""
+    },
+    {
+      "name": "xAI Grok",
+      "baseUrl": "https://api.x.ai/v1",
+      "anthropicUrl": "https://api.x.ai"
+    },
+    {
+      "name": "DeepSeek",
+      "baseUrl": "https://api.deepseek.com",
+      "anthropicUrl": "https://api.deepseek.com/anthropic"
+    },
+    {
+      "name": "Qwen Token Plan CN",
+      "group": "Qwen",
+      "edition": "CN",
+      "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "anthropicUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic"
+    },
+    {
+      "name": "Qwen Token Plan Global",
+      "group": "Qwen",
+      "edition": "Global",
+      "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+      "anthropicUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/apps/anthropic"
+    },
+    {
+      "name": "Kimi For Coding",
+      "group": "Kimi",
+      "edition": "Coding",
+      "baseUrl": "https://api.kimi.com/coding/v1",
+      "anthropicUrl": "https://api.kimi.com/coding"
+    },
+    {
+      "name": "Kimi For Coding Global",
+      "group": "Kimi",
+      "edition": "Coding Intl",
+      "baseUrl": "https://api.kimi.ai/coding/v1",
+      "anthropicUrl": "https://api.kimi.ai/coding"
+    },
+    {
+      "name": "Kimi API",
+      "group": "Kimi",
+      "edition": "API",
+      "baseUrl": "https://api.moonshot.cn/v1",
+      "anthropicUrl": "https://api.moonshot.cn/anthropic"
+    },
+    {
+      "name": "Kimi API Global",
+      "group": "Kimi",
+      "edition": "API Intl",
+      "baseUrl": "https://api.moonshot.ai/v1",
+      "anthropicUrl": "https://api.moonshot.ai/anthropic"
+    },
+    {
+      "name": "Zhipu GLM Coding",
+      "group": "Zhipu GLM",
+      "edition": "Coding",
+      "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
+      "anthropicUrl": "https://open.bigmodel.cn/api/anthropic"
+    },
+    {
+      "name": "Z.ai Coding",
+      "group": "Zhipu GLM",
+      "edition": "Coding Intl",
+      "baseUrl": "https://api.z.ai/api/coding/paas/v4",
+      "anthropicUrl": "https://api.z.ai/api/anthropic"
+    },
+    {
+      "name": "Zhipu GLM API",
+      "group": "Zhipu GLM",
+      "edition": "API",
+      "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+      "anthropicUrl": "https://open.bigmodel.cn/api/anthropic"
+    },
+    {
+      "name": "Z.ai API",
+      "group": "Zhipu GLM",
+      "edition": "API Intl",
+      "baseUrl": "https://api.z.ai/api/paas/v4",
+      "anthropicUrl": "https://api.z.ai/api/anthropic"
+    },
+    {
+      "name": "MiniMax CN",
+      "group": "MiniMax",
+      "edition": "CN",
+      "baseUrl": "https://api.minimax.cn/v1",
+      "anthropicUrl": "https://api.minimax.cn/anthropic"
+    },
+    {
+      "name": "MiniMax Global",
+      "group": "MiniMax",
+      "edition": "Global",
+      "baseUrl": "https://api.minimax.io/v1",
+      "anthropicUrl": "https://api.minimax.io/anthropic"
+    },
+    {
+      "name": "Meta AI",
+      "baseUrl": "",
+      "anthropicUrl": ""
+    },
+    {
+      "name": "Mistral AI",
+      "baseUrl": "https://api.mistral.ai/v1",
+      "anthropicUrl": ""
+    },
+    {
+      "name": "Volcengine Coding Plan",
+      "group": "Volcengine",
+      "edition": "Coding",
+      "baseUrl": "https://ark.cn-beijing.volces.com/api/coding/v3",
+      "anthropicUrl": "https://ark.cn-beijing.volces.com/api/coding",
+      "modelIds": [
+        "ark-code-latest",
+        "doubao-seed-2.0-code",
+        "doubao-seed-2.0-pro",
+        "doubao-seed-2.0-lite",
+        "doubao-seed-2.0-mini",
+        "glm-5.3",
+        "kimi-k2.7-code",
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "deepseek-v4-flash-vision-exp",
+        "minimax-m3",
+        "minimax-m2.7",
+        "kimi-k2.6"
+      ]
+    },
+    {
+      "name": "Volcengine Agent Plan",
+      "group": "Volcengine",
+      "edition": "Agent",
+      "baseUrl": "https://ark.cn-beijing.volces.com/api/plan/v3",
+      "anthropicUrl": "https://ark.cn-beijing.volces.com/api/plan"
+    },
+    {
+      "name": "BytePlus",
+      "group": "Volcengine",
+      "edition": "BytePlus",
+      "baseUrl": "https://ark.ap-southeast.bytepluses.com/api/coding/v3",
+      "anthropicUrl": "https://ark.ap-southeast.bytepluses.com/api/coding",
+      "modelIds": [
+        "ark-code-latest",
+        "doubao-seed-2.0-code",
+        "doubao-seed-2.0-pro",
+        "doubao-seed-2.0-lite",
+        "doubao-seed-2.0-mini",
+        "glm-5.3",
+        "kimi-k2.7-code",
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "deepseek-v4-flash-vision-exp",
+        "minimax-m3",
+        "minimax-m2.7",
+        "kimi-k2.6"
+      ]
+    },
+    {
+      "name": "Xiaomi MiMo Plan CN",
+      "group": "Xiaomi MiMo",
+      "edition": "Plan CN",
+      "baseUrl": "https://token-plan-cn.xiaomimimo.com/v1",
+      "anthropicUrl": "https://token-plan-cn.xiaomimimo.com/anthropic"
+    },
+    {
+      "name": "Xiaomi MiMo Plan SGP",
+      "group": "Xiaomi MiMo",
+      "edition": "Plan SGP",
+      "baseUrl": "https://token-plan-sgp.xiaomimimo.com/v1",
+      "anthropicUrl": "https://token-plan-sgp.xiaomimimo.com/anthropic"
+    },
+    {
+      "name": "Xiaomi MiMo Plan EU",
+      "group": "Xiaomi MiMo",
+      "edition": "Plan EU",
+      "baseUrl": "https://token-plan-ams.xiaomimimo.com/v1",
+      "anthropicUrl": "https://token-plan-ams.xiaomimimo.com/anthropic"
+    },
+    {
+      "name": "Xiaomi MiMo API",
+      "group": "Xiaomi MiMo",
+      "edition": "API",
+      "baseUrl": "https://api.xiaomimimo.com/v1",
+      "anthropicUrl": "https://api.xiaomimimo.com/anthropic"
+    },
+    {
+      "name": "Tencent Hunyuan Token Plan",
+      "group": "Tencent Cloud",
+      "edition": "Token Plan",
+      "baseUrl": "https://api.lkeap.cloud.tencent.com/plan/v3",
+      "anthropicUrl": "https://api.lkeap.cloud.tencent.com/plan/anthropic"
+    },
+    {
+      "name": "Tencent Hunyuan Coding Plan",
+      "group": "Tencent Cloud",
+      "edition": "Coding Plan",
+      "baseUrl": "https://api.lkeap.cloud.tencent.com/coding/v3",
+      "anthropicUrl": "https://api.lkeap.cloud.tencent.com/coding/anthropic"
+    },
+    {
+      "name": "Tencent Hunyuan Token Plan Intl",
+      "group": "Tencent Cloud",
+      "edition": "Token Plan Intl",
+      "baseUrl": "https://tokenhub-intl.tencentcloudmaas.com/plan/v3",
+      "anthropicUrl": "https://tokenhub-intl.tencentcloudmaas.com/plan/anthropic"
+    },
+    {
+      "name": "ERNIE Qianfan Token Plan",
+      "group": "Baidu Qianfan",
+      "edition": "Token Plan",
+      "baseUrl": "https://qianfan.baidubce.com/v2/tokenplan/personal",
+      "anthropicUrl": "https://qianfan.baidubce.com/anthropic/tokenplan/personal",
+      "modelIds": [
+        "qianfan-code-latest",
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "glm-5.2",
+        "glm-5.1",
+        "kimi-k2.6",
+        "ernie-5.1"
+      ]
+    },
+    {
+      "name": "ERNIE Qianfan Coding Plan",
+      "group": "Baidu Qianfan",
+      "edition": "Coding Plan",
+      "baseUrl": "https://qianfan.baidubce.com/v2/coding",
+      "anthropicUrl": "https://qianfan.baidubce.com/anthropic/coding",
+      "modelIds": [
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "deepseek-v4-flash-vision-exp",
+        "glm-5.3",
+        "glm-5.1",
+        "kimi-k2.6",
+        "ernie-5.1"
+      ]
+    },
+    {
+      "name": "StepFun CN",
+      "group": "StepFun",
+      "edition": "CN",
+      "baseUrl": "https://api.stepfun.com/step_plan/v1",
+      "anthropicUrl": "https://api.stepfun.com/step_plan"
+    },
+    {
+      "name": "StepFun Global",
+      "group": "StepFun",
+      "edition": "Global",
+      "baseUrl": "https://api.stepfun.ai/step_plan/v1",
+      "anthropicUrl": "https://api.stepfun.ai/step_plan"
+    },
+    {
+      "name": "LongCat",
+      "baseUrl": "https://api.longcat.chat/openai",
+      "anthropicUrl": "https://api.longcat.chat/anthropic"
+    },
+    {
+      "name": "Cohere",
+      "baseUrl": "https://api.cohere.ai/compatibility/v1",
+      "anthropicUrl": ""
+    },
+    {
+      "name": "Perplexity",
+      "baseUrl": "https://api.perplexity.ai",
+      "anthropicUrl": ""
+    },
+    {
+      "name": "iFlytek Astron Coding Plan",
+      "baseUrl": "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+      "anthropicUrl": "https://maas-coding-api.cn-huabei-1.xf-yun.com/anthropic",
+      "modelIds": [
+        "astron-code-latest"
+      ]
+    },
+    {
+      "name": "Ant Ling",
+      "baseUrl": "https://api.ant-ling.com/v1",
+      "anthropicUrl": "https://api.ant-ling.com/anthropic"
+    },
+    {
+      "name": "Nous Portal",
+      "baseUrl": "https://inference-api.nousresearch.com/v1",
+      "anthropicUrl": ""
+    },
+    {
+      "name": "Agnes AI",
+      "baseUrl": "https://apihub.agnes-ai.com/v1",
+      "anthropicUrl": "https://apihub.agnes-ai.com"
+    },
+    {
+      "name": "OpenRouter",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "anthropicUrl": ""
+    },
+    {
+      "name": "Groq",
+      "baseUrl": "https://api.groq.com/openai/v1",
+      "anthropicUrl": ""
+    },
+    {
+      "name": "NVIDIA",
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "anthropicUrl": ""
+    },
+    {
+      "name": "Together AI",
+      "baseUrl": "https://api.together.xyz/v1",
+      "anthropicUrl": ""
+    },
+    {
+      "name": "Fireworks AI",
+      "baseUrl": "https://api.fireworks.ai/inference/v1",
+      "anthropicUrl": ""
+    },
+    {
+      "name": "Ollama Cloud",
+      "baseUrl": "https://ollama.com/v1",
+      "anthropicUrl": "https://ollama.com"
+    },
+    {
+      "name": "SiliconFlow CN",
+      "group": "SiliconFlow",
+      "edition": "CN",
+      "baseUrl": "https://api.siliconflow.cn/v1",
+      "anthropicUrl": "https://api.siliconflow.cn"
+    },
+    {
+      "name": "SiliconFlow Global",
+      "group": "SiliconFlow",
+      "edition": "Global",
+      "baseUrl": "https://api.siliconflow.com/v1",
+      "anthropicUrl": "https://api.siliconflow.com"
+    },
+    {
+      "name": "Huawei Cloud Token Plan",
+      "group": "Huawei Cloud",
+      "edition": "Token Plan",
+      "baseUrl": "https://api.modelarts-maas.com/plan/v2",
+      "anthropicUrl": "https://api.modelarts-maas.com/plan/anthropic",
+      "modelIds": [
+        "glm-5.3",
+        "glm-5.1",
+        "kimi-k2.6",
+        "deepseek-v4.1-flash",
+        "deepseek-v4-flash"
+      ]
+    },
+    {
+      "name": "Huawei Cloud API",
+      "group": "Huawei Cloud",
+      "edition": "API",
+      "baseUrl": "https://api.modelarts-maas.com/openai/v1",
+      "anthropicUrl": "https://api.modelarts-maas.com/anthropic"
+    },
+    {
+      "name": "OpenCode Zen",
+      "group": "OpenCode",
+      "edition": "Zen",
+      "baseUrl": "https://opencode.ai/zen/v1",
+      "anthropicUrl": "https://opencode.ai/zen/v1/messages"
+    },
+    {
+      "name": "OpenCode Go",
+      "group": "OpenCode",
+      "edition": "Go",
+      "baseUrl": "https://opencode.ai/zen/go/v1",
+      "anthropicUrl": "https://opencode.ai/zen/go/v1/messages"
+    },
+    {
+      "name": "Novita AI",
+      "baseUrl": "https://api.novita.ai/openai/v1",
+      "anthropicUrl": "https://api.novita.ai/anthropic"
+    },
+    {
+      "name": "Baseten",
+      "baseUrl": "https://inference.baseten.co/v1",
+      "anthropicUrl": "https://inference.baseten.co"
+    },
+    {
+      "name": "ModelScope",
+      "baseUrl": "https://api-inference.modelscope.cn/v1",
+      "anthropicUrl": "https://api-inference.modelscope.cn"
+    }
+  ]
+}

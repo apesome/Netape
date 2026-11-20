@@ -3,6 +3,7 @@
 # Each crate owns a focused slice of the application runtime and data model.
 [workspace]
 resolver = "2"
+default-members = ["src-tauri"]
 members = [
     "src-tauri",
     "crates/netape-pty",
@@ -12,13 +13,14 @@ members = [
     "crates/netape-protocol",
     "crates/netape-ftp",
     "crates/netape-smb",
+    "crates/netape-plugin-package",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "AGPL-3.0-or-later"
-repository = "https://github.com/your-org/netape"
+license = "AGPL-3.0"
+repository = "https://github.com/apesome/Netape"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -77,12 +77,8 @@ pub async fn smb_open_host(
     runtime: State<'_, PluginRuntime>,
     params: SmbOpenParams,
 ) -> Result<SmbOpenResult, String> {
-    let (_manifest, bin) = mgr
-        .find_transfer("SMB")
-        .ok_or_else(|| "SMB plugin is not installed".to_string())?;
-
     let session_id = Uuid::new_v4().to_string();
-    let session = PluginSession::spawn(&bin, app, "smb://".to_string(), session_id.clone())?;
+    let session = mgr.spawn_transfer("SMB", app, "smb://".to_string(), session_id.clone())?;
     let res = match session.call("connect", json!({
         "host": params.host,
         "share": params.share,
@@ -112,12 +108,8 @@ pub async fn smb_list_shares(
     mgr: State<'_, PluginManager>,
     params: SmbDiscoverParams,
 ) -> Result<Vec<String>, String> {
-    let (_manifest, bin) = mgr
-        .find_transfer("SMB")
-        .ok_or_else(|| "SMB plugin is not installed".to_string())?;
-
     let session_id = Uuid::new_v4().to_string();
-    let session = PluginSession::spawn(&bin, app, "smb://".to_string(), session_id)?;
+    let session = mgr.spawn_transfer("SMB", app, "smb://".to_string(), session_id)?;
     let res = session
         .call("list_shares", json!({
             "host": params.host,

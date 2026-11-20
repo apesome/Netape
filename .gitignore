@@ -26,3 +26,6 @@ Thumbs.db
 .agents
 .cargo
 plugins-dist
+plugin-release/
+*.private.pem
+catalog-key.pem

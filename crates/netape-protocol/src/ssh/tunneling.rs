@@ -1,6 +1,4 @@
 //! SSH port-forwarding helpers.
-//!
-//! Port of `SshClients.openTunneling` (local / remote / dynamic).
 
 use std::net::SocketAddr;
 use std::sync::Arc;

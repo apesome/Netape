@@ -90,7 +90,7 @@ const IcClearFormat = () => (
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface Props { onClose: () => void; mode?: "dialog" | "panel"; width?: number }
+interface Props { onClose: () => void; width?: number; mode?: "drawer" | "dialog" }
 type AddMenu = { parentId: string | null } | null;
 type CtxMenu  = { x: number; y: number; item: Note | null } | null;
 
@@ -935,7 +935,7 @@ function NoteToolbar({ editor, onSave }: { editor: Editor | null; onSave: () => 
 
 // ── NoteDialog ────────────────────────────────────────────────────────────────
 
-export default function NoteDialog({ onClose, mode = "dialog", width }: Props) {
+export default function NoteDialog({ onClose, width, mode = "drawer" }: Props) {
   useT();
   const [items,            setItems]            = useState<Note[]>([]);
   const [selectedNote,     setSelectedNote]     = useState<Note | null>(null);
@@ -946,7 +946,7 @@ export default function NoteDialog({ onClose, mode = "dialog", width }: Props) {
   const [addMenu,          setAddMenu]          = useState<AddMenu>(null);
   const [ctxMenu,          setCtxMenu]          = useState<CtxMenu>(null);
   const [sidebarWidth,     setSidebarWidth]     = useState(220);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(mode !== "dialog");
 
   const titleInputRef        = useRef<HTMLInputElement>(null);
   const saveTimerRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1287,6 +1287,38 @@ export default function NoteDialog({ onClose, mode = "dialog", width }: Props) {
 
   // ── Shared body fragments ─────────────────────────────────────────────────
 
+  const noteTree = (
+    <div className="note-tree-scroll">
+      <div
+        className={`tree-row${activeFolderId === null ? " tree-row--selected" : ""}`}
+        style={{ paddingLeft: 8, position: "relative" }}
+        onClick={() => setActiveFolderId(null)}
+        onContextMenu={e => {
+          e.preventDefault(); e.stopPropagation();
+          setAddMenu(null);
+          setCtxMenu({ x: e.clientX, y: e.clientY, item: null });
+        }}
+      >
+        <span className="tree-arrow"/>
+        <span className="tree-icon"><IcFolder open={true}/></span>
+        <div className="tree-label-group">
+          <span className="tree-label" style={{ fontWeight: 600 }}>{i18nT("note.all")}</span>
+        </div>
+        <div className="note-row-actions" onClick={e => e.stopPropagation()}>
+          <button
+            className={`note-add-btn${isRootMenuOpen ? " note-add-btn--open" : ""}`}
+            data-tooltip={i18nT("note.new")}
+            onClick={e => { e.stopPropagation(); setAddMenu(isRootMenuOpen ? null : { parentId: null }); }}
+          >
+            <IcPlus/>
+          </button>
+        </div>
+        {isRootMenuOpen && <AddMenuPopup parentId={null}/>}
+      </div>
+      {renderTree(null, 1)}
+    </div>
+  );
+
   const noteHeader = (
     <div className="dialog-header">
       <h2 className="dialog-title">{i18nT("note.title")}</h2>
@@ -1296,50 +1328,25 @@ export default function NoteDialog({ onClose, mode = "dialog", width }: Props) {
 
   const noteBody = (
     <div className="note-body">
-      {/* ── Collapsed bar ── */}
       {sidebarCollapsed ? (
-        <div className="note-collapsed-bar" onClick={() => setSidebarCollapsed(false)}>
-          <span data-tooltip={i18nT("note.expandTree")} style={{ display: "flex" }}><IcChevRight/></span>
-        </div>
+        <button type="button" className="note-collapsed-bar"
+          aria-label={i18nT("note.expandTree")}
+          aria-expanded={false}
+          data-tooltip={i18nT("note.expandTree")}
+          onClick={() => setSidebarCollapsed(false)}>
+          <IcChevRight/>
+        </button>
       ) : (
         <>
-          {/* ── Left: note tree ── */}
-          <div className="note-sidebar" style={{ width: sidebarWidth }}>
-            <div className="note-tree-scroll">
-              <div
-                className={`tree-row${activeFolderId === null ? " tree-row--selected" : ""}`}
-                style={{ paddingLeft: 8, position: "relative" }}
-                onClick={() => setActiveFolderId(null)}
-                onContextMenu={e => {
-                  e.preventDefault(); e.stopPropagation();
-                  setAddMenu(null);
-                  setCtxMenu({ x: e.clientX, y: e.clientY, item: null });
-                }}
-              >
-                <span className="tree-arrow"/>
-                <span className="tree-icon"><IcFolder open={true}/></span>
-                <div className="tree-label-group">
-                  <span className="tree-label" style={{ fontWeight: 600 }}>{i18nT("note.all")}</span>
-                </div>
-                <div className="note-row-actions" onClick={e => e.stopPropagation()}>
-                  <button
-                    className={`note-add-btn${isRootMenuOpen ? " note-add-btn--open" : ""}`}
-                    data-tooltip={i18nT("note.new")}
-                    onClick={e => { e.stopPropagation(); setAddMenu(isRootMenuOpen ? null : { parentId: null }); }}
-                  >
-                    <IcPlus/>
-                  </button>
-                </div>
-                {isRootMenuOpen && <AddMenuPopup parentId={null}/>}
-              </div>
-              {renderTree(null, 1)}
-            </div>
+          <div id="note-navigation" className="note-sidebar" style={{ width: sidebarWidth }}>
+            {noteTree}
           </div>
 
           {/* ── Resizer ── */}
           <div className="note-resizer" onMouseDown={onResizerMouseDown}>
             <button
               className="note-resizer-btn"
+              onMouseDown={e => e.stopPropagation()}
               onClick={e => { e.stopPropagation(); setSidebarCollapsed(true); }}
               data-tooltip={i18nT("note.collapseTree")}
               data-tooltip-pos="above"
@@ -1425,27 +1432,25 @@ export default function NoteDialog({ onClose, mode = "dialog", width }: Props) {
     </>
   );
 
-  // ── Panel mode: inline flex panel, no overlay ─────────────────────────────
-  if (mode === "panel") {
+  if (mode === "dialog") {
     return (
       <>
-        <div className="note-panel-inner" style={width !== undefined ? { width } : undefined}>
-          {noteHeader}
-          {noteBody}
+        <div className="dialog-overlay" onClick={onClose}>
+          <div className="dialog dialog-note" onClick={event => event.stopPropagation()}>
+            {noteHeader}
+            {noteBody}
+          </div>
         </div>
         {noteTail}
       </>
     );
   }
 
-  // ── Dialog mode: centered modal overlay ───────────────────────────────────
   return (
     <>
-      <div className="dialog-overlay" onClick={onClose}>
-        <div className="dialog dialog-note" onClick={e => e.stopPropagation()}>
-          {noteHeader}
-          {noteBody}
-        </div>
+      <div className="note-panel-inner" style={width !== undefined ? { width } : undefined}>
+        {noteHeader}
+        {noteBody}
       </div>
       {noteTail}
     </>

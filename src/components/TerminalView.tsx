@@ -1,3 +1,4 @@
+import { terminalInput, terminalText, type TerminalApi } from "../ai";
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -33,7 +34,7 @@ interface Props {
   sessionId: string;
   settings?: TerminalSettings;
   highlights?: KeywordHighlight[];
-  onRegister?: (api: { write: (data: string) => void }) => void;
+  onRegister?: (api: TerminalApi) => void;
   uiTheme?: "dark" | "light";
   /** Saved Local host: multi-line KEY=value env applied to the shell. */
   env?: string;
@@ -174,6 +175,7 @@ export default function TerminalView({ sessionId, settings, highlights = [], onR
       "block" | "bar" | "underline";
 
     const term = new Terminal({
+      lineHeight: 1.2,
       fontFamily: font,
       fontSize,
       cursorBlink: settings?.cursorBlink ?? true,
@@ -214,7 +216,22 @@ export default function TerminalView({ sessionId, settings, highlights = [], onR
       return true;
     });
 
-    onRegister?.({ write: (data: string) => term.write(data) });
+    onRegister?.({
+      write: (data: string) => term.write(data),
+      getSelection: () => term.getSelection(),
+      getOutput: lines => terminalText(term, lines),
+      execute: async text => {
+        if (term.buffer.active.type === "alternate") throw Error("Leave the fullscreen terminal program before running commands");
+        const data=terminalInput(text,term.modes.bracketedPasteMode,true);
+        await invoke("terminal_write",{sessionId,data});term.focus();
+      },
+      paste: async text => {
+        // Bracketed paste prevents multiline text from executing as keystrokes.
+        const data=terminalInput(text,term.modes.bracketedPasteMode);
+        await invoke("terminal_write", {sessionId,data});
+        term.focus();
+      },
+    });
 
     let unlistenOutput: UnlistenFn | undefined;
     let unlistenExit: UnlistenFn | undefined;

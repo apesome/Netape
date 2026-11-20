@@ -236,10 +236,6 @@ pub async fn ftp_open_host(
     app_state: State<'_, AppState>,
     params: FtpOpenParams,
 ) -> Result<FtpOpenResult, String> {
-    let (_manifest, bin) = mgr
-        .find_transfer("FTP")
-        .ok_or_else(|| "FTP plugin is not installed".to_string())?;
-
     let session_id = Uuid::new_v4().to_string();
 
     // ── SSH tunnel + FTP PASV proxy (optional) ───────────────────────────────
@@ -257,7 +253,10 @@ pub async fn ftp_open_host(
     };
 
     // ── Launch FTP sidecar ───────────────────────────────────────────────────
-    let session = PluginSession::spawn(&bin, app.clone(), "ftp://".to_string(), session_id.clone())?;
+    let session = match mgr.spawn_transfer("FTP", app.clone(), "ftp://".to_string(), session_id.clone()) {
+        Ok(session) => session,
+        Err(error) => { tunnels.remove(&session_id); return Err(error); }
+    };
 
     let res = match session
         .call("connect", json!({

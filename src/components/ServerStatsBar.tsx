@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { invoke } from "@tauri-apps/api/core";
 import type { Host } from "../types";
+import { AiIcon, aiLabel } from "./AiCommon";
 import { t as i18nT, useT } from "../i18n";
 import {
   useServerStats,
@@ -72,14 +73,14 @@ function Chip({
 function CpuPop({ s }: { s: ServerStats }) {
   const cols = s.cpuCores > 8 ? 4 : 2;
   return (
-    <div className="sbp">
+    <div className={`sbp sbp--cpu sbp--cpu-${cols}`}>
       <div className="sbp-title">{i18nT("stats.cpu.cores", { n: s.cpuCores })}</div>
       <div className="sbp-cpu-scroll">
-        <div className="sbp-grid" style={{ gridTemplateColumns: `repeat(${cols}, auto)` }}>
+        <div className="sbp-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
           {s.cpuPerCore.map((pct, i) => (
             <div key={i} className="sbp-core">
               <span className="sbp-lbl">C{i}</span>
-              <Bar pct={pct} color={cpuColor(pct)} w={44} />
+              <Bar pct={pct} color={cpuColor(pct)} />
               <span className="sbp-val" style={{ color: cpuColor(pct) }}>{Math.round(pct)}%</span>
             </div>
           ))}
@@ -197,6 +198,8 @@ const IcMem     = () => <svg width="12" height="12" viewBox="0 0 16 16" fill="no
 const IcDisk    = () => <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="8" cy="13" rx="6" ry="1.5"/><path d="M2 8c0-1.1 2.686-2 6-2s6 .9 6 2"/><path d="M2 5c0-1.1 2.686-2 6-2s6 .9 6 2"/><path d="M2 5v8M14 5v8M2 8v0M14 8v0"/></svg>;
 const IcNet     = () => <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 2v12M2 8h12"/><path d="M3 5q2.5 1 5 1t5-1M3 11q2.5-1 5-1t5 1"/></svg>;
 const IcChevron  = () => <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3l5 5-5 5"/></svg>;
+const IcChevronDown = () => <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m4 6 4 4 4-4"/></svg>;
+const IcChevronUp = () => <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m4 10 4-4 4 4"/></svg>;
 const IcSearch   = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="6.5" cy="6.5" r="4"/><path d="M9.5 9.5l3.5 3.5"/></svg>;
 const IcSystem   = () => <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="1" width="14" height="10" rx="1.5"/><path d="M5 14h6M8 11v3"/><path d="M4 4h8M4 7h5"/></svg>;
 const IcInfo     = () => <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.5v4M8 5.5v.5"/></svg>;
@@ -218,6 +221,7 @@ interface SysInfoData {
 }
 
 function SysInfoPop({ info }: { info: SysInfoData }) {
+  const [copied, setCopied] = useState(false);
   const osLabel  = [info.osName, info.osVer].filter(Boolean).join(" ");
   const cpuLabel = info.cpuCores
     ? `${info.cpuModel}${info.cpuCores ? ` · ${i18nT("stats.sysinfo.cpuCores", { n: info.cpuCores })}` : ""}`
@@ -233,9 +237,30 @@ function SysInfoPop({ info }: { info: SysInfoData }) {
     [i18nT("stats.sysinfo.mem"),      info.memTotal],
     [i18nT("stats.sysinfo.uptime"),   info.uptime  ],
   ].filter(([, v]) => v) as [string, string][];
+
+  const copyInfo = async () => {
+    try {
+      await writeText([
+        i18nT("stats.sysinfo.title"),
+        ...rows.map(([label, value]) => `${label}: ${value}`),
+      ].join("\n"));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
+
   return (
     <div className="sbp sbp--sysinfo">
-      <div className="sbp-title">{i18nT("stats.sysinfo.title")}</div>
+      <div className="sbp-title-row sbp-sysinfo-title-row">
+        <div className="sbp-title">{i18nT("stats.sysinfo.title")}</div>
+        <button className="sbp-copy-btn" type="button" onClick={() => void copyInfo()}
+          data-tooltip={copied ? i18nT("stats.copied") : i18nT("stats.copySystemInfo")}
+          aria-label={copied ? i18nT("stats.copied") : i18nT("stats.copySystemInfo")}>
+          {copied ? <IcOk /> : <IcCopy />}
+        </button>
+      </div>
       {rows.map(([k, v]) => (
         <div key={k} className="sbp-si-row">
           <span className="sbp-si-key">{k}</span>
@@ -254,6 +279,12 @@ interface Props {
   transport?:           "ssh" | "telnet";
   onSystem?:            () => void;
   systemOpen?:          boolean;
+  onProperties?:        () => void;
+  propertiesOpen?:      boolean;
+  onAi?:                () => void;
+  aiOpen?:              boolean;
+  barVisible:           boolean;
+  onBarVisibleChange:   (visible: boolean) => void;
   // Search — controlled from parent
   searchOpen?:          boolean;
   searchQuery?:         string;
@@ -266,14 +297,14 @@ interface Props {
 
 export default function ServerStatsBar({
   sessionId, host, transport,
-  onSystem, systemOpen,
+  onSystem, systemOpen, onProperties, propertiesOpen, onAi, aiOpen, barVisible, onBarVisibleChange,
   searchOpen, searchQuery, onSearchToggle, onSearchQueryChange, onFindNext, onFindPrev, onSearchClose,
 }: Props) {
   useT();
   const enabled    = transport !== "telnet";
   const stats      = useServerStats(sessionId, enabled);
   const [copied,   setCopied]   = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [openPop,  setOpenPop]  = useState<string | null>(null);
   const [popPos,   setPopPos]   = useState({ left: 0, top: 0 });
   const [sysInfo,  setSysInfo]  = useState<SysInfoData | null>(null);
@@ -324,8 +355,23 @@ export default function ServerStatsBar({
     setExpanded((v) => !v);
   };
 
+  const handleToggleBar = () => {
+    if (barVisible) {
+      setOpenPop(null);
+      setExpanded(true);
+    }
+    onBarVisibleChange(!barVisible);
+  };
+
   return (
-    <div className="sb-bar">
+    <div className={`sb-bar${barVisible ? "" : " sb-bar--collapsed"}`}>
+      <button type="button" className="sb-bar-visibility-toggle"
+        onClick={handleToggleBar}
+        data-tooltip={i18nT(barVisible ? "stats.hideBar" : "stats.showBar")}
+        aria-label={i18nT(barVisible ? "stats.hideBar" : "stats.showBar")}
+        aria-expanded={barVisible}>
+        {barVisible ? <IcChevronUp /> : <IcChevronDown />}
+      </button>
       {/* Host copy button */}
       <button
         className={`sb-host${copied ? " sb-host--ok" : ""}`}
@@ -396,7 +442,8 @@ export default function ServerStatsBar({
         </>
       )}
 
-      {/* Center search input — squeezes between stats and right buttons */}
+      <div className="sb-tools">
+      {/* Search remains available while the status bar is collapsed. */}
       {searchOpen && (
         <div className="sb-search" onMouseDown={(e) => e.stopPropagation()}>
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.5 }}>
@@ -423,13 +470,16 @@ export default function ServerStatsBar({
           <button className="sb-action" onClick={() => onFindNext?.(searchQuery ?? "")} data-tooltip={i18nT("stats.nextResult")}>
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6l4 4 4-4"/></svg>
           </button>
+          <button type="button" className="sb-action" onClick={onSearchClose}
+            aria-label={i18nT("term.findClose")} data-tooltip={i18nT("term.findClose")}>✕</button>
         </div>
       )}
 
       {/* Right-side action buttons */}
       <div className="sb-right">
         {onSearchToggle !== undefined && (
-          <button className={`sb-action${searchOpen ? " sb-action--active" : ""}`} onClick={onSearchToggle} data-tooltip={i18nT("stats.search")}>
+          <button className={`sb-action${searchOpen ? " sb-action--active" : ""}`} onClick={onSearchToggle}
+            aria-label={i18nT("stats.search")} data-tooltip={i18nT("stats.search")}>
             <IcSearch />
           </button>
         )}
@@ -437,11 +487,21 @@ export default function ServerStatsBar({
           <button
             className={`sb-action${systemOpen ? " sb-action--active" : ""}`}
             onClick={onSystem}
+            aria-label={i18nT("stats.system")}
             data-tooltip={i18nT("stats.system")}
           >
             <IcSystem />
           </button>
         )}
+        {onProperties && (
+          <button type="button" className={`sb-action${propertiesOpen ? " sb-action--active" : ""}`}
+            onClick={onProperties} aria-label={i18nT("tabMenu.properties")} data-tooltip={i18nT("tabMenu.properties")}>
+            <IcInfo/>
+          </button>
+        )}
+        {onAi && <button type="button" className={`sb-action${aiOpen ? " sb-action--active" : ""}`}
+          onClick={onAi} aria-label={aiLabel("AI 助手", "AI assistant")} data-tooltip={aiLabel("AI 助手", "AI assistant")}><AiIcon/></button>}
+      </div>
       </div>
 
       {/* Popovers rendered in document.body to escape overflow:hidden */}

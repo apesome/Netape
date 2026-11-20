@@ -8,6 +8,7 @@ import { useT } from "../i18n";
 interface Props {
   onClose: () => void;
   onChange?: () => void;
+  embedded?: boolean;
 }
 
 const DEFAULT_COLORS = [
@@ -35,7 +36,7 @@ function newRule(): KeywordHighlight {
   };
 }
 
-export default function KeyHighlightDialog({ onClose, onChange }: Props) {
+export default function KeyHighlightDialog({ onClose, onChange, embedded = false }: Props) {
   const t = useT();
   const [rules, setRules] = useState<KeywordHighlight[]>([]);
   const [selected, setSelected] = useState<KeywordHighlight | null>(null);
@@ -118,12 +119,12 @@ export default function KeyHighlightDialog({ onClose, onChange }: Props) {
 
   return (
     <>
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog dialog-highlight" onClick={(e) => e.stopPropagation()}>
-        <div className="dialog-header">
+    <div className={embedded ? "settings-tool-wrapper" : "dialog-overlay"} onClick={embedded ? undefined : onClose}>
+      <div className={embedded ? "settings-tool-panel settings-highlights" : "dialog dialog-highlight"} onClick={(e) => e.stopPropagation()}>
+        {!embedded && <div className="dialog-header">
           <h2 className="dialog-title">{t("highlight.title")}</h2>
           <button className="dialog-x" onClick={onClose}>✕</button>
-        </div>
+        </div>}
 
         <div className="highlight-body">
           {/* Toolbar */}
@@ -144,7 +145,6 @@ export default function KeyHighlightDialog({ onClose, onChange }: Props) {
             {rules.length === 0 ? (
               <div className="list-empty-state">
                 <InboxEmptyIcon />
-                <div className="list-empty-state-text">{t("highlight.empty")}</div>
               </div>
             ) : (
               <table className="highlight-table">
@@ -152,7 +152,7 @@ export default function KeyHighlightDialog({ onClose, onChange }: Props) {
                   <tr>
                     <th style={{ width: 56, whiteSpace: "nowrap" }}>{t("highlight.col.enabled")}</th>
                     <th>{t("highlight.col.keyword")}</th>
-                    <th style={{ width: 200, whiteSpace: "nowrap" }}>{t("highlight.col.preview")}</th>
+                    <th style={{ width: embedded ? 140 : 200, whiteSpace: "nowrap" }}>{t("highlight.col.preview")}</th>
                     <th>{t("highlight.col.desc")}</th>
                     <th style={{ width: 76, whiteSpace: "nowrap" }}>{t("highlight.col.actions")}</th>
                   </tr>

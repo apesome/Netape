@@ -1,7 +1,5 @@
 //! SSH session: russh Handler + connect/authenticate logic.
 //!
-//! Port of `SshClients.openClient` + `doOpenSession`.
-//!
 //! The public entry is [`connect`], which returns a ready-to-use [`SshSession`].
 
 use std::sync::Arc;
@@ -66,6 +64,10 @@ impl SshSession {
 
     pub async fn exec_cmd(&self, command: &str) -> ProtocolResult<ExecResult> {
         exec(&self.handle, command).await
+    }
+
+    pub async fn exec_monitored(&self, command: &str, timeout_secs: u64, cancel: tokio::sync::watch::Receiver<bool>, on_output: impl Fn(&str)) -> ProtocolResult<super::channel::MonitoredExecResult> {
+        super::channel::exec_monitored(&self.handle, command, timeout_secs, cancel, on_output).await
     }
 
     pub async fn start_forwarding(&self, rule: &TunnelingRule) -> ProtocolResult<String> {

@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect, type ReactNode } from "react";
+import { Children, Fragment, cloneElement, isValidElement, useState, useRef, useEffect, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { type Host, type AuthType, type Tunneling, type TunnelingType, type KeyPair, newHost } from "../types";
 import { getProtocol, useAvailableProtocols, type SectionId } from "../protocols";
 import { t, useT } from "../i18n";
 import CustomSelect from "./CustomSelect";
+import PasswordField from "./PasswordField";
 
 // ── Section nav icons (match each tab's meaning) ──
 const svgProps = {
@@ -53,20 +54,21 @@ const IcoTransfer = () => (
   </svg>
 );
 
-const EyeIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-    <circle cx="12" cy="12" r="3"/>
-  </svg>
-);
-
-const EyeOffIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-    <line x1="1" y1="1" x2="23" y2="23"/>
-  </svg>
-);
+// Keep the same form layout in inspection mode, disabling all mutating controls.
+function disableHostFields(children: ReactNode): ReactNode {
+  return Children.map(children, child => {
+    if (!isValidElement<Record<string, any>>(child)) return child;
+    if (child.type === Fragment) return cloneElement(child, { children: disableHostFields(child.props.children) });
+    if (child.props['data-readonly-allowed']) return child;
+    if (child.type === PasswordField) return cloneElement(child, { disabled: true });
+    const control = child.type === CustomSelect || ['input', 'textarea', 'select', 'button'].includes(child.type as string);
+    return cloneElement(child, {
+      ...(control ? { disabled: true } : {}),
+      onClick: undefined, onChange: undefined, onDoubleClick: undefined, onKeyDown: undefined,
+      ...(child.props.children !== undefined ? { children: disableHostFields(child.props.children) } : {}),
+    });
+  });
+}
 
 interface Props {
   host?: Host;
@@ -74,6 +76,7 @@ interface Props {
   initialProtocol?: string;
   mode?: "dialog" | "drawer";
   drawerWidth?: number;
+  readOnly?: boolean;
   onSave: () => void;
   onClose: () => void;
 }
@@ -91,10 +94,10 @@ function emptyTunneling(): Tunneling {
   return { name: "", type: "Local", sourceHost: "127.0.0.1", sourcePort: 8080, destinationHost: "127.0.0.1", destinationPort: 22 };
 }
 
-export default function HostDialog({ host, hosts = [], initialProtocol, mode = "dialog", drawerWidth, onSave, onClose }: Props) {
+export default function HostDialog({ host, hosts = [], initialProtocol, mode = "dialog", drawerWidth, readOnly = false, onSave, onClose }: Props) {
   useT(); // Subscribe to language changes
   const isNew = !host?.createDate;
-  const isProtocolLocked = !isNew || (host?.parentId ?? "0") !== "0";
+  const isProtocolLocked = readOnly || !isNew || (host?.parentId ?? "0") !== "0";
   const [form, setForm] = useState<Host>(() => {
     const base = host ? structuredClone(host) : newHost();
     if (!host && initialProtocol) {
@@ -109,8 +112,6 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
   const [error, setError] = useState("");
   const [tunForm, setTunForm] = useState<{ idx: number | null; data: Tunneling } | null>(null);
   const [showJumpPicker, setShowJumpPicker] = useState(false);
-  const [showPass, setShowPass] = useState(false);
-  const [showProxyPass, setShowProxyPass] = useState(false);
   const [keys, setKeys] = useState<KeyPair[]>([]);
   const [wslDistros, setWslDistros] = useState<string[]>([]);
   const [discoveringShares, setDiscoveringShares] = useState(false);
@@ -221,6 +222,7 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
   };
 
   const handleSave = async () => {
+    if (readOnly) return;
     if (!form.name.trim()) { setError(t("host.dialog.nameRequired")); return; }
     if (needsHost && !form.host.trim()) { setError(t("host.dialog.hostRequired")); return; }
     if (form.protocol === "SMB" && !extra("smbShare").trim()) { setError(t("host.dialog.shareRequired")); return; }
@@ -309,7 +311,7 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
 
         {/* ── Header ── */}
         <div className="dialog-header">
-          <h2 className="dialog-title">{isNew ? t("host.dialog.newHost") : t("host.dialog.edit", { name: form.name })}</h2>
+          <h2 className="dialog-title">{readOnly ? t("tabMenu.properties") : isNew ? t("host.dialog.newHost") : t("host.dialog.edit", { name: form.name })}</h2>
           <div className="host-proto-badge-wrap" ref={protoBadgeRef}>
             <button
               className={`host-proto-badge${isProtocolLocked ? " is-disabled" : ""}`}
@@ -335,7 +337,7 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
               </div>
             )}
           </div>
-          <button className="dialog-x" onClick={onClose}>✕</button>
+          <button className="dialog-x" data-readonly-allowed onClick={onClose}>✕</button>
         </div>
 
         {/* ── Split: nav + content ── */}
@@ -409,16 +411,8 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
 
                 {def.showPassword && (<>
                   <label className="hf-lbl" htmlFor="hf-fpass">{t("host.dialog.password")}</label>
-                  <div className="hf-pass-wrap">
-                    <input id="hf-fpass" type={showPass ? "text" : "password"} className="hf-ctrl"
-                      value={form.authentication.password}
-                      onChange={(e) => setAuth("password", e.target.value)}
-                      placeholder={t("host.dialog.passwordPlaceholder")} autoComplete="new-password" />
-                    <button type="button" className="hf-pass-eye" onClick={() => setShowPass(v => !v)}
-                      data-tooltip={showPass ? t("host.dialog.hidePassword") : t("host.dialog.showPassword")}>
-                      {showPass ? <EyeOffIcon /> : <EyeIcon />}
-                    </button>
-                  </div>
+                  <PasswordField id="hf-fpass" value={form.authentication.password} disabled={readOnly}
+                      onChange={value => setAuth("password", value)} placeholder={t("host.dialog.passwordPlaceholder")}/>
                 </>)}
 
                 {form.protocol === "SMB" && (<>
@@ -475,16 +469,8 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
 
                 {def.showAuth && form.authentication.type === "Password" && (<>
                   <label className="hf-lbl" htmlFor="hf-pass">{t("host.dialog.password")}</label>
-                  <div className="hf-pass-wrap">
-                    <input id="hf-pass" type={showPass ? "text" : "password"} className="hf-ctrl"
-                      value={form.authentication.password}
-                      onChange={(e) => setAuth("password", e.target.value)}
-                      placeholder={t("host.dialog.passwordMaskPlaceholder")} autoComplete="new-password" />
-                    <button type="button" className="hf-pass-eye" onClick={() => setShowPass(v => !v)}
-                      data-tooltip={showPass ? t("host.dialog.hidePassword") : t("host.dialog.showPassword")}>
-                      {showPass ? <EyeOffIcon /> : <EyeIcon />}
-                    </button>
-                  </div>
+                  <PasswordField id="hf-pass" value={form.authentication.password} disabled={readOnly}
+                      onChange={value => setAuth("password", value)} placeholder={t("host.dialog.passwordMaskPlaceholder")}/>
                 </>)}
 
                 {def.showAuth && form.authentication.type === "PublicKey" && (<>
@@ -580,16 +566,8 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
                       autoComplete="off" />
 
                     <label className="hf-lbl" htmlFor="hf-ppass">{t("host.dialog.password")}</label>
-                    <div className="hf-pass-wrap">
-                      <input id="hf-ppass" type={showProxyPass ? "text" : "password"} className="hf-ctrl"
-                        value={form.proxy.password}
-                        onChange={(e) => setProxy("password", e.target.value)}
-                        autoComplete="new-password" />
-                      <button type="button" className="hf-pass-eye" onClick={() => setShowProxyPass(v => !v)}
-                        data-tooltip={showProxyPass ? t("host.dialog.hidePassword") : t("host.dialog.showPassword")}>
-                        {showProxyPass ? <EyeOffIcon /> : <EyeIcon />}
-                      </button>
-                    </div>
+                    <PasswordField id="hf-ppass" value={form.proxy.password} disabled={readOnly}
+                      onChange={value => setProxy("password", value)}/>
                   </>)}
                 </>)}
               </div>
@@ -796,10 +774,10 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
 
         {/* ── Footer ── */}
         <div className="dialog-actions">
-          <button onClick={onClose}>{t("host.dialog.cancel")}</button>
-          <button className="btn-primary" onClick={handleSave} disabled={saving}>
+          <button data-readonly-allowed onClick={onClose}>{t(readOnly ? "app.window.close" : "host.dialog.cancel")}</button>
+          {!readOnly && <button className="btn-primary" onClick={handleSave} disabled={saving}>
             {saving ? t("host.dialog.saving") : t("host.dialog.save")}
-          </button>
+          </button>}
         </div>
       </>
   );
@@ -810,7 +788,7 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
         className="host-drawer-panel dialog-host-v2"
         style={drawerWidth ? { width: `${drawerWidth}px` } : undefined}
       >
-        {hostInner}
+        {readOnly ? disableHostFields(hostInner) : hostInner}
       </div>
     );
   }
@@ -818,7 +796,7 @@ export default function HostDialog({ host, hosts = [], initialProtocol, mode = "
   return (
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog dialog-host-v2" onClick={(e) => e.stopPropagation()}>
-        {hostInner}
+        {readOnly ? disableHostFields(hostInner) : hostInner}
       </div>
     </div>
   );

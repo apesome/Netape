@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Host } from "../types";
 import HostTree from "./HostTree";
+import { SidebarPanelIcon } from "./icons";
 import ConfirmDialog, { useConfirm } from "./ConfirmDialog";
 import { toast } from "./Toast";
 import { useAvailableProtocols } from "../protocols";
@@ -89,9 +90,10 @@ export default function Sidebar({
         <button
           className="icon-btn"
           data-tooltip={t("sidebar.collapse")}
+          aria-label={t("sidebar.collapse")}
           onClick={onToggle}
         >
-          ◁
+          <SidebarPanelIcon />
         </button>
       </div>
 
@@ -145,6 +147,7 @@ export default function Sidebar({
           onNewHost={(pid, proto) => onNewHost(pid, proto)}
           onNewFolder={(pid, name, protocol) => onNewFolder(pid, name, protocol)}
           onRename={handleRename}
+          onReorder={onRefresh}
           filter={filter}
           protoFilter={protoFilter}
         />

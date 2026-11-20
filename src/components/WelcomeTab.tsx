@@ -7,6 +7,9 @@ import NameDialog from "./NameDialog";
 import { toast } from "./Toast";
 import { useAvailableProtocols } from "../protocols";
 import { useT } from "../i18n";
+import { folderBelongsToProtocol } from "../hostTreeProtocol";
+import { compareHostOrder } from "../hostTreeOrder";
+import { useHostReorder } from "../hooks/useHostReorder";
 import { InboxEmptyIcon } from "./icons";
 
 const OpenNewTabIcon = () => (
@@ -39,7 +42,6 @@ interface Props {
   onDeleteHost: () => void;
   onNewFolder: (parentId: string, name: string, protocol?: string) => void;
   onRename: (id: string, name: string) => void;
-  onOpenKeyManager: () => void;
   onOpenSettings: () => void;
 }
 
@@ -63,6 +65,7 @@ export default function WelcomeTab({
   const [protoDropOpen, setProtoDropOpen] = useState(false);
   const [emptyNewMenuOpen, setEmptyNewMenuOpen] = useState(false);
   const [currentGroupId, setCurrentGroupId] = useState("0");
+  const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
   const [gridCtx, setGridCtx] = useState<null | { x: number; y: number; kind: "folder" | "host"; item: Host }>(null);
   const [renameTarget, setRenameTarget] = useState<Host | null>(null);
   const [newFolderTarget, setNewFolderTarget] = useState<{ parentId: string; nextGroupId?: string } | null>(null);
@@ -70,6 +73,12 @@ export default function WelcomeTab({
   const emptyNewMenuRef = useRef<HTMLDivElement>(null);
   const gridCtxRef = useRef<HTMLDivElement>(null);
   const { confirmState, confirm, handleOk, handleCancel } = useConfirm();
+  const { dragSource, dropTarget, startReorder, suppressClickUntil } = useHostReorder({
+    hosts, onReorder: onDeleteHost, layout: "grid", disabled: !!renameTarget || !!newFolderTarget,
+    resetKey: JSON.stringify([layoutMode, query, protoFilter, currentGroupId]),
+    onDragStart: () => setGridCtx(null),
+  });
+  const orderClass = (id: string) => `${dragSource === id ? " host-card--dragging" : ""}${dropTarget?.id === id ? ` host-card--drop-${dropTarget.position}` : ""}`;
 
   useEffect(() => {
     if (!protoDropOpen) return;
@@ -115,16 +124,19 @@ export default function WelcomeTab({
   const hostsById = new Map(hosts.map((h) => [h.id, h]));
   const isFolder = (h: Host) => h.protocol === "Folder";
   const activeProtocol = protoFilter || "SSH";
-  const folderBelongsToActiveProtocol = (h: Host) => isFolder(h) && ((h.ownerType || "SSH") === activeProtocol);
+  const folderBelongsToActiveProtocol = (h: Host) => folderBelongsToProtocol(h, activeProtocol);
   const queryLower = query.trim().toLowerCase();
   const currentGroup = currentGroupId === "0" ? null : hostsById.get(currentGroupId);
   const createParentId = showGrid ? currentGroupId : "0";
 
   useEffect(() => {
-    if (currentGroupId !== "0" && (!currentGroup || currentGroup.deleted || !isFolder(currentGroup))) {
+    if (currentGroupId !== "0" && (
+      !currentGroup || currentGroup.deleted || !isFolder(currentGroup)
+      || (currentGroup.ownerType || "SSH") !== activeProtocol
+    )) {
       setCurrentGroupId("0");
     }
-  }, [currentGroup, currentGroupId]);
+  }, [currentGroup, currentGroupId, activeProtocol]);
 
   useEffect(() => {
     if (!showGrid) setCurrentGroupId("0");
@@ -196,16 +208,13 @@ export default function WelcomeTab({
     .filter((h) => !h.deleted && folderBelongsToActiveProtocol(h) && belongsToCurrentBranch(h))
     .filter((h) => !protoFilter || folderOrDescendantMatches(h.id) || !folderHasAnyDescendantHost(h.id))
     .filter((h) => !queryLower || h.name.toLowerCase().includes(queryLower) || folderOrDescendantMatches(h.id))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort(compareHostOrder);
 
   const childHosts = hosts
     .filter((h) => !h.deleted && !isFolder(h) && belongsToCurrentBranch(h))
     .filter((h) => !protoFilter || h.protocol === protoFilter)
     .filter((h) => !queryLower || [h.name, h.host, h.username, h.remark].some((v) => v.toLowerCase().includes(queryLower)))
-    .sort((a, b) => {
-      const byName = a.name.localeCompare(b.name);
-      return byName !== 0 ? byName : a.host.localeCompare(b.host);
-    });
+    .sort(compareHostOrder);
 
   const isGridEmpty = showGrid && childFolders.length === 0 && childHosts.length === 0;
 
@@ -286,7 +295,13 @@ export default function WelcomeTab({
                   <div
                       key={p.value}
                       className={`proto-prefix-drop-item${protoFilter === p.value ? " active" : ""}`}
-                      onClick={() => { setProtoFilter(p.value); setProtoDropOpen(false); }}
+                      onClick={() => {
+                        if (p.value !== protoFilter) {
+                          setCurrentGroupId("0");
+                          setProtoFilter(p.value);
+                        }
+                        setProtoDropOpen(false);
+                      }}
                     >
                       <span className="proto-drop-icon">{p.icon}</span>
                       <span>{p.label}</span>
@@ -354,7 +369,8 @@ export default function WelcomeTab({
                         {index > 0 && <span className="welcome-grid-crumb-sep"><CrumbChevron /></span>}
                         <button
                           type="button"
-                          className={`welcome-grid-crumb${crumb.id === currentGroupId ? " active" : ""}`}
+                          className={`welcome-grid-crumb${crumb.id === currentGroupId ? " active" : ""}${dropTarget?.id === crumb.id ? " host-card--drop-inside" : ""}`}
+                          data-host-order-id={crumb.id}
                           onClick={() => setCurrentGroupId(crumb.id)}
                         >
                           {crumb.name}
@@ -382,8 +398,11 @@ export default function WelcomeTab({
                           <button
                             key={folder.id}
                             type="button"
-                            className="welcome-group-card"
-                            onClick={() => setCurrentGroupId(folder.id)}
+                            className={`welcome-group-card${orderClass(folder.id)}`}
+                            data-host-order-id={folder.id}
+                            onPointerDown={event => startReorder(event, folder)}
+                            onDragStart={event => event.preventDefault()}
+                            onClick={() => { if (Date.now() >= suppressClickUntil.current) setCurrentGroupId(folder.id); }}
                             onContextMenu={(e) => openGridCtx(e, "folder", folder)}
                             data-tooltip={folder.name}
                           >
@@ -411,9 +430,16 @@ export default function WelcomeTab({
                         <button
                           key={host.id}
                           type="button"
-                          className="welcome-host-card"
-                          onClick={() => onOpenHost(host)}
-                          onDoubleClick={() => onOpenHost(host)}
+                          className={`welcome-host-card${selectedHostId === host.id ? " welcome-host-card--selected" : ""}${orderClass(host.id)}`}
+                          aria-pressed={selectedHostId === host.id}
+                          data-host-order-id={host.id}
+                          onPointerDown={event => startReorder(event, host)}
+                          onDragStart={event => event.preventDefault()}
+                          onClick={() => { if (Date.now() >= suppressClickUntil.current) setSelectedHostId(host.id); }}
+                          onDoubleClick={() => { if (Date.now() >= suppressClickUntil.current) onOpenHost(host); }}
+                          onKeyDown={event => {
+                            if (event.key === "Enter" && !event.repeat) { event.preventDefault(); onOpenHost(host); }
+                          }}
                           onContextMenu={(e) => openGridCtx(e, "host", host)}
                           data-tooltip={host.name}
                         >
@@ -439,6 +465,7 @@ export default function WelcomeTab({
           onNewHost={onNewHost}
           onNewFolder={onNewFolder}
           onRename={onRename}
+          onReorder={onDeleteHost}
           filter={query}
           protoFilter={protoFilter}
                 />

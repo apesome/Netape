@@ -2,6 +2,9 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import type { Host } from "../types";
 import { ROOT_ID, useTreeExpanded, toggleExpanded, setTreeExpanded } from "../store/treeStore";
 import { useT } from "../i18n";
+import { folderBelongsToProtocol } from "../hostTreeProtocol";
+import { compareHostOrder } from "../hostTreeOrder";
+import { useHostReorder } from "../hooks/useHostReorder";
 
 interface Props {
   hosts: Host[];
@@ -11,6 +14,7 @@ interface Props {
   onNewHost: (parentId: string, protocol?: string) => void;
   onNewFolder: (parentId: string, name: string, protocol?: string) => void;
   onRename: (id: string, name: string) => void;
+  onReorder?: () => void;
   filter?: string;
   protoFilter?: string;
 }
@@ -72,6 +76,7 @@ export default function HostTree({
   onNewHost,
   onNewFolder,
   onRename,
+  onReorder,
   filter = "",
   protoFilter = "",
 }: Props) {
@@ -84,9 +89,12 @@ export default function HostTree({
   const renameInputRef = useRef<HTMLInputElement>(null);
   const inlineFolderInputRef = useRef<HTMLInputElement>(null);
   const ctxRef = useRef<HTMLDivElement>(null);
-
   // Inline new-folder: { parentId, name }
   const [inlineFolder, setInlineFolder] = useState<{ parentId: string; name: string } | null>(null);
+  const { dragSource, dropTarget, startReorder, suppressClickUntil } = useHostReorder({
+    hosts, onReorder, disabled: !!renaming || !!inlineFolder,
+    resetKey: JSON.stringify([filter, protoFilter]), onDragStart: () => setCtx(null),
+  });
   // Refs so the click-outside handler always reads the latest values (no stale closure)
   const inlineFolderValueRef = useRef(inlineFolder);
   inlineFolderValueRef.current = inlineFolder;
@@ -96,7 +104,7 @@ export default function HostTree({
   const showHostSubtitle = (host: Host) => !["Local", "WSL"].includes(host.protocol);
   const activeProtocol = protoFilter || "SSH";
   const folderBelongsToActiveProtocol = (host: Host) =>
-    host.protocol === "Folder" && ((host.ownerType || "SSH") === activeProtocol);
+    folderBelongsToProtocol(host, activeProtocol);
 
   useEffect(() => { renameInputRef.current?.select(); }, [renaming?.id]);
 
@@ -230,13 +238,7 @@ export default function HostTree({
   function getChildren(parentId: string): Host[] {
     return hosts
       .filter((h) => (h.parentId ?? "0") === parentId && !h.deleted)
-      .sort((a, b) => {
-        const af = a.protocol === "Folder" ? 0 : 1;
-        const bf = b.protocol === "Folder" ? 0 : 1;
-        if (af !== bf) return af - bf;
-        if (a.sort !== b.sort) return a.sort - b.sort;
-        return a.name.localeCompare(b.name);
-      });
+      .sort(compareHostOrder);
   }
 
   // ── Context menu open helpers ───────────────────────────────────────────────
@@ -315,15 +317,20 @@ export default function HostTree({
         return (
           <div key={host.id} className="tree-node">
             <div
-              className={`tree-row${isFolder ? "" : " tree-row--host"}${isSelected ? " tree-row--selected" : ""}`}
-              style={{ paddingLeft: 8 + depth * 16 }}
+              className={`tree-row${isFolder ? "" : " tree-row--host"}${isSelected ? " tree-row--selected" : ""}${dragSource === host.id ? " tree-row--dragging" : ""}${dropTarget?.id === host.id ? ` tree-row--drop-${dropTarget.position}` : ""}`}
+              data-host-order-id={host.id}
+              onPointerDown={event => startReorder(event, host)}
+              // Parent label starts after its arrow, folder icon and two gaps
+              // (38px). Child indentation already contributes 16px of that.
+              style={{ paddingLeft: 8 + depth * 16 + (isFolder ? 0 : 22), "--tree-depth": depth } as React.CSSProperties}
               tabIndex={isSelected ? 0 : -1}
-              data-tooltip={host.remark || undefined}
+              data-tooltip={[host.name, !isFolder && showHostSubtitle(host) ? `${host.username ? `${host.username}@` : ""}${host.host}:${host.port}` : "", host.remark].filter(Boolean).join("\n")}
               onClick={() => {
+                if (Date.now() < suppressClickUntil.current) return;
                 setSelected(host.id);
                 if (isFolder) toggle(host.id);
               }}
-              onDoubleClick={() => { if (!isFolder) onOpen(host); }}
+              onDoubleClick={() => { if (!isFolder && Date.now() >= suppressClickUntil.current) onOpen(host); }}
               onKeyDown={(e) => handleRowKey(e, host.id, isFolder, host)}
               onContextMenu={(e) => openCtxForHost(e, host)}
             >
@@ -354,7 +361,7 @@ export default function HostTree({
                   )}
                 </>
               ) : (
-                /* ── Host row: avatar + two-line text ── */
+                /* ── Host row: avatar + inline name and connection details ── */
                 <>
                   <div className="tree-host-avatar">
                     <HostAvatarIcon />
@@ -426,9 +433,10 @@ export default function HostTree({
 
       {/* ── Root node ── */}
       <div
-        className={`tree-row tree-row--root${selected === ROOT_ID ? " tree-row--selected" : ""}`}
+        className={`tree-row tree-row--root${selected === ROOT_ID ? " tree-row--selected" : ""}${dropTarget?.id === "0" ? " tree-row--drop-inside" : ""}`}
+        data-host-order-id="0"
         tabIndex={selected === ROOT_ID ? 0 : -1}
-        onClick={() => { setSelected(ROOT_ID); toggle(ROOT_ID); }}
+        onClick={() => { if (Date.now() >= suppressClickUntil.current) { setSelected(ROOT_ID); toggle(ROOT_ID); } }}
         onKeyDown={(e) => handleRowKey(e, ROOT_ID, true)}
         onContextMenu={openCtxForRoot}
       >
@@ -473,7 +481,7 @@ export default function HostTree({
               onMouseLeave={() => setOpenSub(null)}
             >
               <span>{t("sftp.menu.new")}</span>
-              <span className="ctx-sub-arrow">▶</span>
+              <span className="ctx-sub-arrow" aria-hidden="true">›</span>
               {openSub === "new" && (
                 <div className="ctx-sub">
                   <div className="ctx-item" onClick={() => { onNewHost(ctxParentId, protoFilter || undefined); setCtx(null); }}>

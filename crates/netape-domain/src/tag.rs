@@ -1,6 +1,4 @@
 //! Tag model and manager.
-//!
-//! Port of `app.termora.tag.Tag` and `app.termora.tag.TagManager`.
 
 use netape_store::{db::Store, model::{new_id, AccountOwner, DataType}};
 use serde::{Deserialize, Serialize};
@@ -13,8 +11,6 @@ fn now_ms() -> i64 {
 }
 
 /// A label that can be attached to hosts.
-///
-/// Port of `app.termora.tag.Tag`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Tag {
@@ -40,8 +36,6 @@ impl Tag {
 }
 
 /// CRUD facade for [`Tag`] records.
-///
-/// Port of `app.termora.tag.TagManager`.
 pub struct TagManager<'a> {
     store: &'a Store,
     owner: &'a AccountOwner,

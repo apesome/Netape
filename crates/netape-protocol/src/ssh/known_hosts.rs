@@ -1,7 +1,5 @@
 //! Known-hosts file management.
 //!
-//! Port of `SshClients.DialogServerKeyVerifier` / `KnownHostsServerKeyVerifier`.
-//!
 //! For now we accept all host keys (TOFU — trust on first use) and write them
 //! to the known_hosts file.  A UI callback for key-change warnings is planned
 //! as a Tauri command in a follow-up.

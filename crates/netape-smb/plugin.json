@@ -1,0 +1,12 @@
+{
+  "id": "smb",
+  "name": "SMB",
+  "version": "1.0.0",
+  "kind": "transfer",
+  "protocol": "SMB",
+  "bin": "netape-smb",
+  "description": "Windows SMB file transfer",
+  "author": "apesome",
+  "capabilities": ["transfer"],
+  "pluginApiVersion": 1
+}

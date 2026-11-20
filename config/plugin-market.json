@@ -1,0 +1,13 @@
+{
+  "indexUrl": "https://apesome.github.io/Netape/plugins/v1/index.json",
+  "allowedHosts": [
+    "apesome.github.io",
+    "github.com",
+    "release-assets.githubusercontent.com",
+    "objects.githubusercontent.com",
+    "github-releases.githubusercontent.com"
+  ],
+  "keys": {
+    "apesome-2026": "87282bdcfe854651f90a33170d107fe0af5f88097056640d44589007bd843f4f"
+  }
+}

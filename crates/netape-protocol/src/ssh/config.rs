@@ -74,9 +74,6 @@ pub enum ProxyConfig {
 }
 
 /// Flat SSH connection parameters derived from [`Host`].
-///
-/// Port of the parameters scattered across `SshClients.openClient` /
-/// `doOpenSession`.
 #[derive(Debug, Clone)]
 pub struct SshConfig {
     /// Remote hostname or IP.

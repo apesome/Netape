@@ -1,0 +1,12 @@
+{
+  "id": "ftp",
+  "name": "FTP",
+  "version": "1.1.0",
+  "kind": "transfer",
+  "protocol": "FTP",
+  "bin": "netape-ftp",
+  "description": "FTP file transfer",
+  "author": "apesome",
+  "capabilities": ["transfer"],
+  "pluginApiVersion": 1
+}

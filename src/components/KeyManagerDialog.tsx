@@ -8,9 +8,10 @@ import CustomSelect from "./CustomSelect";
 
 interface Props {
   onClose: () => void;
+  embedded?: boolean;
 }
 
-export default function KeyManagerDialog({ onClose }: Props) {
+export default function KeyManagerDialog({ onClose, embedded = false }: Props) {
   const t = useT();
   const [keys, setKeys] = useState<KeyPair[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,12 +73,12 @@ export default function KeyManagerDialog({ onClose }: Props) {
 
   return (
     <>
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog dialog-lg dialog-keymgr dialog-highlight" onClick={(e) => e.stopPropagation()}>
-        <div className="dialog-header">
+    <div className={embedded ? "settings-tool-wrapper" : "dialog-overlay"} onClick={embedded ? undefined : onClose}>
+      <div className={embedded ? "settings-tool-panel settings-key-manager" : "dialog dialog-lg dialog-keymgr dialog-highlight"} onClick={(e) => e.stopPropagation()}>
+        {!embedded && <div className="dialog-header">
           <h2 className="dialog-title">{t("keyMgr.title")}</h2>
           <button className="dialog-x" onClick={onClose}>✕</button>
-        </div>
+        </div>}
 
         {mode === "list" && (
           <>
@@ -95,7 +96,6 @@ export default function KeyManagerDialog({ onClose }: Props) {
               {!loading && keys.length === 0 && (
                 <div className="keymgr-empty list-empty-state">
                   <InboxEmptyIcon />
-                  <div className="list-empty-state-text">{t("keyMgr.empty")}</div>
                 </div>
               )}
               {keys.map((kp) => (
@@ -115,9 +115,9 @@ export default function KeyManagerDialog({ onClose }: Props) {
             </div>
 
             {error && <div className="dialog-error">{error}</div>}
-            <div className="dialog-actions">
+            {!embedded && <div className="dialog-actions">
               <button onClick={onClose}>{t("keyMgr.close")}</button>
-            </div>
+            </div>}
           </>
         )}
 

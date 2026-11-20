@@ -1,6 +1,4 @@
 //! SSH key pair model and manager.
-//!
-//! Port of `app.termora.keymgr.OhKeyPair` and `app.termora.keymgr.KeyManager`.
 
 use netape_store::{db::Store, model::{new_id, AccountOwner, DataType}};
 use serde::{Deserialize, Serialize};
@@ -15,8 +13,6 @@ fn now_ms() -> i64 {
 /// An SSH key pair stored in the database.
 ///
 /// Public and private keys are stored as Base64-encoded bytes.
-///
-/// Port of `app.termora.keymgr.OhKeyPair`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyPair {
@@ -60,8 +56,6 @@ impl KeyPair {
 }
 
 /// CRUD facade for [`KeyPair`] records.
-///
-/// Port of `app.termora.keymgr.KeyManager`.
 pub struct KeyManager<'a> {
     store: &'a Store,
     owner: &'a AccountOwner,

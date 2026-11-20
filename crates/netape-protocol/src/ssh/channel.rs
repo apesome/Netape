@@ -171,6 +171,46 @@ pub struct ExecResult {
     pub stdout: String,
 }
 
+pub struct MonitoredExecResult { pub exit_code: i32, pub stdout: String, pub truncated: bool }
+
+/// A separate exec channel; cancellation closes this command without closing the interactive PTY.
+pub async fn exec_monitored(
+    handle: &Arc<russh::client::Handle<super::session::ClientHandler>>, command: &str,
+    timeout_secs: u64, mut cancel: tokio::sync::watch::Receiver<bool>, on_output: impl Fn(&str),
+) -> ProtocolResult<MonitoredExecResult> {
+    let deadline = tokio::time::sleep(std::time::Duration::from_secs(timeout_secs)); tokio::pin!(deadline);
+    let mut channel = tokio::select! {
+        channel = handle.channel_open_session() => channel?,
+        _ = cancel.changed() => return Err(crate::error::ProtocolError::Other("Cancelled".into())),
+        _ = &mut deadline => return Err(crate::error::ProtocolError::Other("Command channel timed out".into())),
+    };
+    tokio::select! {
+        result = channel.exec(true, command) => result?,
+        _ = cancel.changed() => { let _=channel.close().await; return Err(crate::error::ProtocolError::Other("Cancelled".into())); },
+        _ = &mut deadline => { let _=channel.close().await; return Err(crate::error::ProtocolError::Other("Command timed out".into())); },
+    }
+    let mut output = Vec::new(); let mut exit_code = -1; let mut truncated = false;
+    let limit = 256_000;
+    loop {
+        tokio::select! {
+            _ = cancel.changed() => { let _=channel.signal(russh::Sig::TERM).await; let _=channel.close().await; return Err(crate::error::ProtocolError::Other("Cancelled; termination was requested from the remote process".into())); }
+            _ = &mut deadline => { let _=channel.signal(russh::Sig::TERM).await; let _=channel.close().await; return Err(crate::error::ProtocolError::Other("Command timed out; termination was requested".into())); }
+            message = channel.wait() => match message {
+                Some(ChannelMsg::Data {ref data}) | Some(ChannelMsg::ExtendedData {ref data,..}) => {
+                    let remaining = limit - output.len();
+                    let part = &data[..data.len().min(remaining)]; output.extend_from_slice(part);
+                    if !part.is_empty() { on_output(&String::from_utf8_lossy(part)); }
+                    if data.len() > remaining { truncated=true; let _=channel.signal(russh::Sig::TERM).await; let _=channel.close().await; break; }
+                }
+                Some(ChannelMsg::ExitStatus {exit_status}) => exit_code=exit_status as i32,
+                Some(ChannelMsg::Close) | None => break,
+                _ => {}
+            }
+        }
+    }
+    Ok(MonitoredExecResult {exit_code,stdout:String::from_utf8_lossy(&output).into_owned(),truncated})
+}
+
 /// Open an exec channel, run `command`, collect stdout, return exit code.
 pub async fn exec(
     handle: &Arc<russh::client::Handle<super::session::ClientHandler>>,

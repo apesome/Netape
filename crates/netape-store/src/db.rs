@@ -1,7 +1,5 @@
 //! SQLite-backed store.
 //!
-//! Port of `app.termora.database.DatabaseManager`.
-//!
 //! All public methods take `&self` because the connection is protected by an
 //! internal `Mutex<Connection>`.  The lock is held only for the duration of
 //! each SQL statement — never across application-level operations — so
@@ -106,7 +104,7 @@ impl Store {
     }
 
     // -----------------------------------------------------------------------
-    // Data CRUD — mirrors DatabaseManager.save / rawData / delete
+    // Data CRUD
     // -----------------------------------------------------------------------
 
     /// Insert or update a row (upsert).  Returns the final [`Data`].
@@ -158,9 +156,34 @@ impl Store {
         self.save(&row)
     }
 
+    /// Update only sort fields in one transaction, preserving all other object data.
+    pub fn reorder_objects(&self, ids: &[String], owner: &AccountOwner, data_type: DataType) -> StoreResult<()> {
+        self.reorder_and_move_objects(ids, None, owner, data_type)
+    }
+
+    /// Patch a parent and the destination order atomically without replacing credentials or options.
+    pub fn reorder_and_move_objects(&self, ids: &[String], moved: Option<(&str, &str)>, owner: &AccountOwner, data_type: DataType) -> StoreResult<()> {
+        let mut conn = self.inner.conn.lock();
+        let tx = conn.transaction()?;
+        for (index, id) in ids.iter().enumerate() {
+            let data: String = tx.query_row(
+                "SELECT data FROM data WHERE id = ?1 AND owner_id = ?2 AND owner_type = ?3 AND data_type = ?4 AND deleted = 0",
+                params![id, &owner.id, owner.owner_type.to_string(), data_type.to_string()],
+                |row| row.get(0),
+            )?;
+            let mut value: serde_json::Value = serde_json::from_str(&data)?;
+            value["sort"] = (index as i64).into();
+            if let Some((moved_id, parent_id)) = moved {
+                if id == moved_id { value["parentId"] = parent_id.into(); }
+            }
+            tx.execute("UPDATE data SET data = ?1, version = version + 1, synced = 0 WHERE id = ?2",
+                params![serde_json::to_string(&value)?, id])?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Insert, incrementing the existing version if the row already exists.
-    ///
-    /// Port of `DatabaseManager.saveAndIncrementVersion`.
     pub fn save_and_increment(&self, data: &Data) -> StoreResult<()> {
         if let Some(existing) = self.get_raw(data.id.as_str())? {
             if existing.deleted {
@@ -285,7 +308,7 @@ impl Store {
     }
 
     // -----------------------------------------------------------------------
-    // Settings — port of DatabaseManager.getSetting / setSetting
+    // Settings
     // -----------------------------------------------------------------------
 
     /// Read a single setting value.

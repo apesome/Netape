@@ -10,6 +10,13 @@ import { FtpFolderIcon, SmbFolderIcon, SshIcon, InboxEmptyIcon } from "./icons";
 import { toast } from "./Toast";
 import { ROOT_ID as TREE_ROOT, useTreeExpanded, toggleExpanded } from "../store/treeStore";
 import CustomSelect from "./CustomSelect";
+import { folderBelongsToProtocol } from "../hostTreeProtocol";
+import { syncTransferTimings, transferElapsed, type TransferClock } from "../transferTiming";
+
+const TransferChevron = ({ expanded }: { expanded: boolean }) => (
+  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+    style={{ transform: expanded ? "rotate(90deg)" : undefined }}><path d="m5 2 6 6-6 6"/></svg>
+);
 
 // ---------------------------------------------------------------------------
 // Native shell icon cache
@@ -253,8 +260,10 @@ function PickerNode({
           onClick={() => toggleExpanded(host.id)}>
           <ChevronIcon open={open}/>
           <FolderPickerIcon open={open}/>
-          <span className="sftp-picker-folder-name">{host.name || i18nT("sftp.unnamed")}</span>
-          {cnt > 0 && <span className="sftp-picker-count">{cnt}</span>}
+          <span className="tree-label-group">
+            <span className="sftp-picker-folder-name">{host.name || i18nT("sftp.unnamed")}</span>
+            {cnt > 0 && <span className="tree-count-tag">{cnt}</span>}
+          </span>
         </div>
         {open && children.map(c =>
           <PickerNode key={c.id} host={c} allHosts={allHosts} depth={depth + 1}
@@ -267,12 +276,14 @@ function PickerNode({
   const busy = connecting === host.id;
   return (
     <div className={`sftp-picker-row sftp-picker-host${busy ? " sftp-picker-host-busy" : ""}`}
-      style={{ paddingLeft: indent }}
-      onClick={() => !busy && onConnect(host)}>
+      style={{ paddingLeft: indent + (depth > 0 ? 21 : 0) }}
+      onClick={() => !connecting && onConnect(host)}>
       <HostPickerIcon/>
       <div className="sftp-picker-host-info">
         <span className="sftp-picker-host-name">{host.name || host.host}</span>
-        <span className="sftp-picker-host-sub">{host.username}@{host.host}:{host.port}</span>
+        <span className="sftp-picker-host-sub" data-tooltip={`${host.username ? `${host.username}@` : ""}${host.host}:${host.port}`}>
+          {host.username ? `${host.username}@` : ""}{host.host}:{host.port}
+        </span>
       </div>
       {busy && <span className="sftp-picker-busy">{i18nT("sftp.connecting")}</span>}
     </div>
@@ -289,27 +300,16 @@ function HostPickerTree({
   const expanded = useTreeExpanded();
   const rootOpen = expanded.has(TREE_ROOT);
 
-  // When a transfer-capable protocol is selected, filter by that protocol.
-  // Otherwise, show all transfer-capable hosts and prune empty folder branches.
+  // Use the same folder ownership rule as the home tree; a matching host
+  // under another protocol's folder must not make that folder visible.
   const matchHost = (h: Host) =>
     !isFolder(h) && !h.deleted &&
     ((protoFilter && isTransferProtocol(protoFilter))
       ? h.protocol === protoFilter
       : isTransferProtocol(h.protocol));
 
-  const hostsById = new Map(hosts.map(h => [h.id, h]));
-  const neededFolders = new Set<string>();
-  for (const h of hosts) {
-    if (!matchHost(h)) continue;
-    let pid = h.parentId;
-    while (pid && pid !== "0" && !neededFolders.has(pid)) {
-      const folder = hostsById.get(pid);
-      if (!folder) break;
-      neededFolders.add(pid);
-      pid = folder.parentId;
-    }
-  }
-  const visibleHosts = hosts.filter(h => isFolder(h) ? neededFolders.has(h.id) : matchHost(h));
+  const visibleHosts = hosts.filter(h => !h.deleted && (isFolder(h)
+    ? folderBelongsToProtocol(h, protoFilter || "SSH") : matchHost(h)));
 
   const lf = search.toLowerCase();
 
@@ -334,7 +334,8 @@ function HostPickerTree({
 
   // Normal mode expands the synthetic root and shows all top-level entries.
   const rootChildren = getChildren(visibleHosts, "0");
-  const total = countHosts(visibleHosts, "0");
+  // Home counts all matching descendants, including those in hidden folders.
+  const total = countHosts(hosts.filter(h => isFolder(h) || matchHost(h)), "0");
 
   if (total === 0 && protoFilter) {
     return (
@@ -350,8 +351,10 @@ function HostPickerTree({
         onClick={() => toggleExpanded(TREE_ROOT)}>
         <ChevronIcon open={rootOpen}/>
         <PersonIcon/>
-        <span className="sftp-picker-folder-name">{i18nT("sftp.myHosts")}</span>
-        {total > 0 && <span className="sftp-picker-count">{total}</span>}
+        <span className="tree-label-group">
+          <span className="sftp-picker-folder-name">{i18nT("sftp.myHosts")}</span>
+          {total > 0 && <span className="tree-count-tag">{total}</span>}
+        </span>
       </div>
       {rootOpen && rootChildren.map(h =>
         <PickerNode key={h.id} host={h} allHosts={visibleHosts} depth={1}
@@ -431,6 +434,7 @@ const providerUnsupportedLabel = (p: TransferProvider | undefined) => (p ?? "sft
 
 interface PaneTab {
   id:           string;
+  selectingHost?: boolean;
   path:         string;
   input:        string;
   editingInput: boolean;
@@ -452,7 +456,7 @@ interface PaneTab {
 interface ColWidths { name: number; type: number; size: number; date: number; perms: number; owner: number; }
 type SortCol = "name" | "type" | "size" | "date" | "perms" | "owner";
 
-interface SubFile {
+interface SubFile extends TransferClock {
   relPath:  string;          // relative path, e.g. "subfolder/file.txt"
   name:     string;
   status:   "pending" | "running" | "done";
@@ -475,7 +479,7 @@ interface SubCtxMenu {
   folderFiles?: SubFile[];
 }
 
-interface Transfer {
+interface Transfer extends TransferClock {
   id: string; name: string; direction: "up" | "down";
   status: "pending" | "running" | "done" | "error";
   transferred: number; total: number; error?: string;
@@ -513,6 +517,10 @@ const makeTab = (path: string, label: string, sftpId?: string, labelKey?: string
 });
 
 const paneTabLabel = (tab: PaneTab) => tab.labelKey ? i18nT(tab.labelKey) : tab.label;
+
+const makeHostSelectionTab = (): PaneTab => ({
+  ...makeTab("", "Select host", undefined, "sftp.selectHost"), selectingHost: true,
+});
 
 // ---------------------------------------------------------------------------
 // Utilities
@@ -594,6 +602,59 @@ function fmtElapsed(ms: number): string {
 // FilePane
 // ---------------------------------------------------------------------------
 
+function HostSelectionPage({ hosts, connecting, onConnect }: {
+  hosts: Host[]; connecting: string | null; onConnect: (host: Host) => void;
+}) {
+  const t = useT();
+  const protocols = useAvailableProtocols().filter(protocol => protocol.canTransfer);
+  const [search, setSearch] = useState("");
+  const [protocol, setProtocol] = useState("SSH");
+  const [protocolMenuOpen, setProtocolMenuOpen] = useState(false);
+  const protocolMenuRef = useRef<HTMLDivElement>(null);
+  const activeProtocol = protocols.some(item => item.id === protocol) ? protocol : protocols[0]?.id ?? "SSH";
+  const selectedProtocol = protocols.find(item => item.id === activeProtocol);
+  useEffect(() => {
+    if (!protocolMenuOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!protocolMenuRef.current?.contains(event.target as Node)) setProtocolMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [protocolMenuOpen]);
+  return (
+    <div className="sftp-host-selection">
+      <div className="sftp-host-selection-search">
+        <div className="proto-prefix-wrap" ref={protocolMenuRef}>
+          <button type="button" className="proto-prefix-btn" aria-expanded={protocolMenuOpen}
+            data-tooltip={t("host.switchType")} onClick={() => setProtocolMenuOpen(value => !value)}>
+            <span className="proto-prefix-icon">{selectedProtocol?.icon}</span>
+            <span className="proto-prefix-label">{selectedProtocol && t(selectedProtocol.filterLabelKey ?? selectedProtocol.filterLabel)}</span>
+            <span className="proto-prefix-arrow">▾</span>
+          </button>
+          {protocolMenuOpen && (
+            <div className="proto-prefix-drop">
+              {protocols.map(item => (
+                <button type="button" key={item.id}
+                  className={`proto-prefix-drop-item${item.id === activeProtocol ? " active" : ""}`}
+                  onClick={() => { setProtocol(item.id); setProtocolMenuOpen(false); }}>
+                  <span className="proto-drop-icon">{item.icon}</span>
+                  <span>{t(item.filterLabelKey ?? item.filterLabel)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <input aria-label={t("host.searchPlaceholder")} placeholder={t("host.searchPlaceholder")}
+          value={search} onChange={event => setSearch(event.target.value)}/>
+      </div>
+      <div className="sftp-host-selection-tree">
+        <HostPickerTree hosts={hosts} search={search} protoFilter={activeProtocol}
+          connecting={connecting} onConnect={onConnect}/>
+      </div>
+    </div>
+  );
+}
+
 interface FilePaneProps {
   tabs:           PaneTab[];
   activeTabId:    string;
@@ -623,6 +684,9 @@ interface FilePaneProps {
   containerRef?:  React.RefObject<HTMLDivElement>;
   nativeIcons?:   boolean;
   style?:         React.CSSProperties;
+  hosts:          Host[];
+  connecting:     string | null;
+  onConnectHost:  (host: Host, tabId: string) => void;
 }
 
 function FilePane({
@@ -632,7 +696,7 @@ function FilePane({
   onShowDrives, onToggleHidden, showHidden,
   onSelect, onContextMenu, onBgContextMenu, onColResize,
   onTransfer, onEdit, onPaste, isDragOver = false, containerRef,
-  nativeIcons = false, style,
+  nativeIcons = false, style, hosts, connecting, onConnectHost,
 }: FilePaneProps) {
   useT();
   const active = tabs.find(t => t.id === activeTabId) ?? tabs[0] ?? null;
@@ -719,7 +783,7 @@ function FilePane({
       {/* ── Section header ── */}
       <div className="sftp-pane-section">
         <div className="sftp-tabs-row">
-          {tabs.map(tab => (
+          {tabs.map((tab, index) => (
             <button key={tab.id}
               className={`sftp-tab${tab.id === activeTabId ? " sftp-tab-active" : ""}`}
               onClick={() => onTabActivate(tab.id)}
@@ -734,8 +798,8 @@ function FilePane({
                 </span>
               )}
               <span className="sftp-tab-name">{paneTabLabel(tab)}</span>
-              <span className={`sftp-tab-dot sftp-tab-dot--${tab.connected === false ? "red" : "green"}`}/>
-              {!tab.pinned && (
+              {!tab.selectingHost && <span className={`sftp-tab-dot sftp-tab-dot--${tab.connected === false ? "red" : "green"}`}/>}
+              {!tab.pinned && !(index === 0 && tab.selectingHost) && (
                 <span className="sftp-tab-close"
                   onClick={ev => { ev.stopPropagation(); onTabClose(tab.id); }}>×</span>
               )}
@@ -745,6 +809,10 @@ function FilePane({
         </div>
       </div>
 
+      {active?.selectingHost || !active ? (
+        <HostSelectionPage key={active?.id ?? "empty"} hosts={hosts} connecting={connecting}
+          onConnect={host => active && onConnectHost(host, active.id)}/>
+      ) : (<>
       {/* ── Toolbar ── */}
       <div className="sftp-pane-toolbar">
         <button className="sftp-nav-btn" data-tooltip={i18nT("sftp.nav.back")}
@@ -797,7 +865,7 @@ function FilePane({
                   onClick={e => { e.stopPropagation(); onNavigate(active.id, seg.path); }}>
                   {seg.label}
                 </button>
-                {i < arr.length - 1 && <span className="sftp-bc-sep">›</span>}
+                {i < arr.length - 1 && <span className="sftp-bc-sep" aria-hidden="true"><svg width="10" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="m5 2 6 6-6 6"/></svg></span>}
               </span>
             )) : <span className="sftp-bc-placeholder">—</span>}
           </div>
@@ -1018,6 +1086,7 @@ function FilePane({
         }
         return <div className="sftp-stats-bar">{text}</div>;
       })()}
+      </>)}
     </div>
   );
 }
@@ -1033,6 +1102,8 @@ const MemoFilePane = React.memo(FilePane, (a, b) =>
   a.showHidden   === b.showHidden   &&
   a.isDragOver   === b.isDragOver   &&
   a.nativeIcons  === b.nativeIcons  &&
+  a.hosts        === b.hosts        &&
+  a.connecting   === b.connecting   &&
   a.style        === b.style
 );
 
@@ -1061,11 +1132,11 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
   const [leftActive,  setLeftActive]  = useState<string>("");
   const leftActiveRef  = useRef("");
   const rightActiveRef = useRef("");
-  const [rightTabs,   setRightTabs]   = useState<PaneTab[]>([]);
-  const [rightActive, setRightActive] = useState<string>("");
+  const [rightTabs,   setRightTabs]   = useState<PaneTab[]>(() => [makeHostSelectionTab()]);
+  const [rightActive, setRightActive] = useState<string>(() => rightTabs[0].id);
 
   const leftTabsRef  = useRef<PaneTab[]>([]);
-  const rightTabsRef = useRef<PaneTab[]>([]);
+  const rightTabsRef = useRef<PaneTab[]>(rightTabs);
   useEffect(() => { leftTabsRef.current  = leftTabs;  }, [leftTabs]);
   useEffect(() => { rightTabsRef.current = rightTabs; }, [rightTabs]);
   useEffect(() => { leftActiveRef.current  = leftActive;  }, [leftActive]);
@@ -1079,12 +1150,6 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
   const providerById = useRef<Map<string, TransferProvider>>(new Map());
   const providerOf = (sftpId: string | undefined): TransferProvider =>
     (sftpId ? providerById.current.get(sftpId) : undefined) ?? "sftp";
-
-  // Protocol filter options for the host picker (hides uninstalled-plugin protocols).
-  // Only transfer-capable protocols (SSH/SFTP, FTP) make sense in the picker.
-  const pickerProtos = useAvailableProtocols()
-    .filter((p) => p.canTransfer)
-    .map((p) => ({ value: p.id, icon: p.icon, label: i18nT(p.filterLabelKey ?? p.filterLabel) }));
 
   // ── Drag-drop refs (used by Tauri onDragDropEvent listener) ──────────────
   const leftPaneRef    = useRef<HTMLDivElement>(null);
@@ -1137,7 +1202,11 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
   const applyAllRef = useRef(new Map<string, string>());
 
   // ── Transfer queue ────────────────────────────────────────────────────────
-  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [transfers, setTransferState] = useState<Transfer[]>([]);
+  const setTransfers = useCallback((update: React.SetStateAction<Transfer[]>) => {
+    const now=Date.now();
+    setTransferState(previous => syncTransferTimings(typeof update === "function" ? update(previous) : update,previous,now));
+  }, []);
   const clearDoneRef = useRef(sftpSettings.clearDone);
   useEffect(() => { clearDoneRef.current = sftpSettings.clearDone; }, [sftpSettings.clearDone]);
   const [expandedXfers, setExpandedXfers] = useState<Set<string>>(new Set());
@@ -1241,26 +1310,14 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
   const [isDragging, setIsDragging] = useState(false);
   const panesRef = useRef<HTMLDivElement>(null);
 
-  // ── Host picker ───────────────────────────────────────────────────────────
-  const [picker,            setPicker]           = useState<{ x: number; y: number } | null>(null);
-  const [pickerPane,        setPickerPane]        = useState<"left" | "right">("right");
-  const [pickerSearch,      setPickerSearch]      = useState("");
-  const [pickerProtoFilter, setPickerProtoFilter] = useState("SSH");
-  const [pickerProtoDropOpen, setPickerProtoDropOpen] = useState(false);
-  const [connecting,        setConnecting]        = useState<string | null>(null);
-  const pickerRef      = useRef<HTMLDivElement>(null);
-  const pickerProtoRef = useRef<HTMLDivElement>(null);
-  // Use the live host list from App.tsx and drop soft-deleted entries.
-  const pickerHosts = propHosts.filter(h => !h.deleted);
+  // Track pending connections by selection tab, so separate tabs can connect independently.
+  const [connectingByTab, setConnectingByTab] = useState<Record<string, string>>({});
+  const connectingTabsRef = useRef(new Set<string>());
+  const mountedRef = useRef(true);
 
+  // ── Init: left pane = Desktop, right pane = host selection ─────────────────────────
   useEffect(() => {
-    if (pickerProtos.length > 0 && !pickerProtos.some((p) => p.value === pickerProtoFilter)) {
-      setPickerProtoFilter(pickerProtos[0].value);
-    }
-  }, [pickerProtoFilter, pickerProtos]);
-
-  // ── Init: left pane = Desktop, right pane = empty ─────────────────────────
-  useEffect(() => {
+    mountedRef.current = true;
     let cancelled = false;
     (async () => {
       try {
@@ -1268,13 +1325,14 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
         if (cancelled) return;
         const sep  = home.includes("\\") ? "\\" : "/";
         const lt   = { ...makeTab(`${home}${sep}Desktop`, "Local", undefined, "sftp.localTab"), pinned: true };
-        setLeftTabs([lt]);
-        setLeftActive(lt.id);
-        leftTabsRef.current = [lt];
+        setLeftTabs(previous => [lt, ...previous]);
+        setLeftActive(previous => previous || lt.id);
+        leftTabsRef.current = [lt, ...leftTabsRef.current];
         loadDir(lt.id, lt.path, undefined, setLeftTabs);
       } catch { /* ignore */ }
     })();
     return () => {
+      mountedRef.current = false;
       cancelled = true;
       for (const id of sftpSessions.current) {
         invoke(rcmd(providerOf(id), "close"), { sftpId: id }).catch(() => {});
@@ -1318,7 +1376,7 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
     tabsRef: React.MutableRefObject<PaneTab[]>,
   ) => {
     const tab = tabsRef.current.find(t => t.id === tabId);
-    if (!tab) return;
+    if (!tab || tab.selectingHost) return;
     const ok = await loadDir(tabId, path, tab.sftpId, setTabs);
     if (!ok) {
       setTabs(prev => prev.map(t => t.id === tabId ? { ...t, input: t.path, editingInput: false } : t));
@@ -1434,7 +1492,7 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
     setActive:(id: string) => void,
   ) => {
     const tab = tabs.find(t => t.id === tabId);
-    if (tab?.pinned) return;
+    if (tab?.pinned || (tabs[0]?.id === tabId && tab?.selectingHost)) return;
     if (tab?.sftpId) {
       sftpStatusUnlisten.current.get(tab.sftpId)?.();
       sftpStatusUnlisten.current.delete(tab.sftpId);
@@ -1444,7 +1502,11 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
     }
     setTabs(prev => {
       const next = prev.filter(t => t.id !== tabId);
-      if (next.length === 0) { setActive(""); return []; }
+      if (next.length === 0) {
+        const selection = makeHostSelectionTab();
+        setActive(selection.id);
+        return [selection];
+      }
       if (activeId === tabId) {
         const idx = prev.findIndex(t => t.id === tabId);
         setActive(next[Math.min(idx, next.length - 1)].id);
@@ -1453,18 +1515,22 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
     });
   };
 
-  // ── Host picker ───────────────────────────────────────────────────────────
-  const showHostPicker = (pane: "left" | "right", e: React.MouseEvent) => {
-    e.stopPropagation();
-    setPickerPane(pane);
-    setPickerSearch("");
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setPicker({ x: rect.left, y: rect.bottom + 4 });
+  // ── Host selection tabs ─────────────────────────────────────────────────
+  const addHostSelection = (pane: "left" | "right") => {
+    const tab = makeHostSelectionTab();
+    const setTabs = pane === "left" ? setLeftTabs : setRightTabs;
+    const tabsRef = pane === "left" ? leftTabsRef : rightTabsRef;
+    const setActive = pane === "left" ? setLeftActive : setRightActive;
+    tabsRef.current = [...tabsRef.current, tab];
+    setTabs(previous => [...previous, tab]);
+    setActive(tab.id);
   };
 
-  const handleHostConnect = async (host: Host, targetPane?: "left" | "right") => {
-    setConnecting(host.id);
-    const pane: "left" | "right" = targetPane ?? pickerPane ?? "left";
+  const handleHostConnect = async (host: Host, pane: "left" | "right", targetTabId?: string) => {
+    const connectionKey = targetTabId ?? pane;
+    if (connectingTabsRef.current.has(connectionKey)) return;
+    connectingTabsRef.current.add(connectionKey);
+    setConnectingByTab(previous => ({ ...previous, [connectionKey]: host.id }));
     const proto = host.protocol.toUpperCase();
     const provider: TransferProvider = proto === "FTP" ? "ftp" : proto === "SMB" ? "smb" : "sftp";
     try {
@@ -1507,9 +1573,14 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
               jumpHostIds: host.options?.jumpHosts?.length ? host.options.jumpHosts : undefined,
             },
           });
+      const targetTabsRef = pane === "left" ? leftTabsRef : rightTabsRef;
+      if (!mountedRef.current || (targetTabId && !targetTabsRef.current.some(item => item.id === targetTabId))) {
+        await invoke(rcmd(provider, "close"), { sftpId });
+        return;
+      }
       providerById.current.set(sftpId, provider);
       sftpSessions.current.add(sftpId);
-      void (async () => {
+      await (async () => {
         const ref_ = { fn: null as UnlistenFn | null };
         // SFTP emits sftp://status (disconnected); the FTP plugin emits ftp://exit.
         const chan = provider === "ftp"
@@ -1533,26 +1604,39 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
       const label     = host.name || host.host;
       const tab       = { ...makeTab(startPath, label, sftpId), provider, connected: true, hostId: host.id };
 
-      if (pane === "left") {
-        setLeftTabs(prev => [...prev, tab]);
-        setLeftActive(tab.id);
-        leftTabsRef.current = [...leftTabsRef.current, tab];
-        loadDir(tab.id, startPath, sftpId, setLeftTabs);
-      } else {
-        setRightTabs(prev => [...prev, tab]);
-        setRightActive(tab.id);
-        rightTabsRef.current = [...rightTabsRef.current, tab];
-        loadDir(tab.id, startPath, sftpId, setRightTabs);
+      const setTabs = pane === "left" ? setLeftTabs : setRightTabs;
+      const tabsRef = pane === "left" ? leftTabsRef : rightTabsRef;
+      const setActive = pane === "left" ? setLeftActive : setRightActive;
+      if (targetTabId && !tabsRef.current.some(item => item.id === targetTabId)) {
+        sftpStatusUnlisten.current.get(sftpId)?.();
+        sftpStatusUnlisten.current.delete(sftpId);
+        sftpSessions.current.delete(sftpId);
+        providerById.current.delete(sftpId);
+        await invoke(rcmd(provider, "close"), { sftpId });
+        return;
       }
-      setPicker(null);
+      const connectedTab = targetTabId ? { ...tab, id: targetTabId } : tab;
+      const replaceSelection = (previous: PaneTab[]) => targetTabId
+        ? previous.map(item => item.id === targetTabId ? connectedTab : item)
+        : [...previous, connectedTab];
+      tabsRef.current = replaceSelection(tabsRef.current);
+      setTabs(replaceSelection);
+      // A connection finishing in a background tab must not steal focus.
+      if (!targetTabId) setActive(connectedTab.id);
+      void loadDir(connectedTab.id, startPath, sftpId, setTabs);
     } catch (err) {
       toast(i18nT("sftp.error.connect", { error: String(err) }), "error", `${host.name || host.host}`);
     } finally {
-      setConnecting(null);
+      connectingTabsRef.current.delete(connectionKey);
+      setConnectingByTab(previous => {
+        const next = { ...previous };
+        delete next[connectionKey];
+        return next;
+      });
     }
   };
 
-  // Directly open a host (e.g. an FTP host) into the left pane on mount.
+  // Directly open a host (e.g. an FTP host) into the right pane.
   const connectHostNonce = useRef<number | null>(null);
   useEffect(() => {
     if (connectHost?.host && connectHostNonce.current !== connectHost.nonce) {
@@ -1564,8 +1648,19 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
 
   // ── Auto-connect from active SSH terminal (reuses existing SSH session) ──
   const handleAutoConnect = useCallback(async (host: Host, sessionId: string, startDir: string) => {
+    // Reserve an unused selection tab so manual connections cannot race this
+    // request. Existing remote connections are always preserved.
+    const target = rightTabsRef.current.find(tab => tab.selectingHost && !connectingTabsRef.current.has(tab.id));
+    if (target) {
+      connectingTabsRef.current.add(target.id);
+      setConnectingByTab(previous => ({ ...previous, [target.id]: host.id }));
+    }
     try {
       const sftpId = await invoke<string>("sftp_open", { sessionId });
+      if (!mountedRef.current || (target && !rightTabsRef.current.some(tab => tab.id === target.id && tab.selectingHost))) {
+        await invoke("sftp_close", { sftpId });
+        return;
+      }
       sftpSessions.current.add(sftpId);
       const ref_ = { fn: null as UnlistenFn | null };
       const ul = await listen<string>(`sftp://status/${sftpId}`, ev => {
@@ -1583,13 +1678,33 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
       try { homeDir = await invoke<string>("ssh_get_cwd", { sessionId }); } catch { /* stay at "/" */ }
       const startPath = startDir || sftpSettings.defaultDir || homeDir;
       const label     = host.name || host.host;
-      const tab       = { ...makeTab(startPath, label, sftpId), connected: true, hostId: host.id, homePath: homeDir };
-      setRightTabs(prev => [...prev, tab]);
+      if (!mountedRef.current || (target && !rightTabsRef.current.some(tab => tab.id === target.id && tab.selectingHost))) {
+        sftpStatusUnlisten.current.get(sftpId)?.();
+        sftpStatusUnlisten.current.delete(sftpId);
+        sftpSessions.current.delete(sftpId);
+        await invoke("sftp_close", { sftpId });
+        return;
+      }
+      const tab = { ...makeTab(startPath, label, sftpId), ...(target ? { id: target.id } : {}),
+        connected: true, hostId: host.id, homePath: homeDir };
+      const updateTabs = (previous: PaneTab[]) => target
+        ? previous.map(item => item.id === target.id ? tab : item)
+        : [...previous, tab];
+      rightTabsRef.current = updateTabs(rightTabsRef.current);
+      setRightTabs(updateTabs);
       setRightActive(tab.id);
-      rightTabsRef.current = [...rightTabsRef.current, tab];
       loadDir(tab.id, startPath, sftpId, setRightTabs);
     } catch (err) {
       toast(i18nT("sftp.error.autoConnect", { error: String(err) }), "error", `${host.name || host.host}`);
+    } finally {
+      if (target) {
+        connectingTabsRef.current.delete(target.id);
+        setConnectingByTab(previous => {
+          const next = { ...previous };
+          delete next[target.id];
+          return next;
+        });
+      }
     }
   }, [sftpSettings.defaultDir, loadDir]);
 
@@ -1659,37 +1774,6 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
       toast(i18nT("sftp.error.reconnect", { error: String(err) }), "error");
     }
   }, [loadDir]);
-
-  // Picker: outside-click dismiss
-  useEffect(() => {
-    if (!picker) return;
-    const h = (e: MouseEvent) => {
-      if (!pickerRef.current?.contains(e.target as Node)) setPicker(null);
-    };
-    window.addEventListener("mousedown", h);
-    return () => window.removeEventListener("mousedown", h);
-  }, [!!picker]);
-
-  // Picker proto dropdown: outside-click dismiss
-  useEffect(() => {
-    if (!pickerProtoDropOpen) return;
-    const h = (e: MouseEvent) => {
-      if (!pickerProtoRef.current?.contains(e.target as Node)) setPickerProtoDropOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [pickerProtoDropOpen]);
-
-  // Picker: auto-position inside viewport
-  useLayoutEffect(() => {
-    const el = pickerRef.current;
-    if (!el || !picker) return;
-    const { width, height } = el.getBoundingClientRect();
-    const x = picker.x + width  > window.innerWidth  ? picker.x - width  : picker.x;
-    const y = picker.y + height > window.innerHeight ? picker.y - height - 44 : picker.y;
-    el.style.left = `${Math.max(4, x)}px`;
-    el.style.top  = `${Math.max(4, y)}px`;
-  }, [picker, pickerHosts.length]);
 
   // ── Selection ─────────────────────────────────────────────────────────────
   const selectLeft  = (tabId: string, fn: (p: Set<string>) => Set<string>) =>
@@ -1812,7 +1896,7 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
   const handleCopyToOther = async (fromPane: "left" | "right", fileEntries: FileEntry[]) => {
     const srcTab  = fromPane === "left" ? leftTab  : rightTab;
     const destTab = fromPane === "left" ? rightTab : leftTab;
-    if (!destTab || fileEntries.length === 0) return;
+    if (!destTab || destTab.selectingHost || srcTab?.selectingHost || fileEntries.length === 0) return;
     // Require one side to be local and the other to be SFTP
     const isUpload   = !srcTab?.sftpId && !!destTab.sftpId;
     const isDownload = !!srcTab?.sftpId && !destTab.sftpId;
@@ -1826,7 +1910,7 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
     const refresh = () => {
       // Only refresh the destination panel — the source hasn't changed.
       const dt = destTabsRef.current.find(x => x.id === destActRef.current);
-      if (dt) loadDir(dt.id, dt.path, dt.sftpId, destSetT);
+      if (dt && !dt.selectingHost) loadDir(dt.id, dt.path, dt.sftpId, destSetT);
     };
 
     let preApplyAll = false;
@@ -1943,7 +2027,7 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
 
     const refresh = () => {
       const dt = destTabsRef.current.find(x => x.id === destActRef.current);
-      if (dt) loadDir(dt.id, dt.path, dt.sftpId, destSetT);
+      if (dt && !dt.selectingHost) loadDir(dt.id, dt.path, dt.sftpId, destSetT);
     };
 
     type StatEntry = { path: string; name: string; isDir: boolean; size: number };
@@ -2343,7 +2427,10 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
           tabs={leftTabs} activeTabId={leftActive} colWidths={leftColWidths}
           onTabActivate={setLeftActive}
           onTabClose={id => closeTab(id, leftTabs, setLeftTabs, leftActive, setLeftActive)}
-          onTabAdd={e => showHostPicker("left", e)}
+          onTabAdd={() => addHostSelection("left")}
+          hosts={propHosts}
+          connecting={connectingByTab[leftTab?.id ?? ""] ?? null}
+          onConnectHost={(host, tabId) => void handleHostConnect(host, "left", tabId)}
           onInputChange={(tid, v) => setLeftTabs(prev => prev.map(t => t.id === tid ? { ...t, input: v } : t))}
           onNavigate={(tid, p) => navigateTo(tid, p, setLeftTabs, leftTabsRef)}
           onBack={tid => goBack(tid, setLeftTabs, leftTabsRef)}
@@ -2389,7 +2476,10 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
           tabs={rightTabs} activeTabId={rightActive} colWidths={rightColWidths}
           onTabActivate={setRightActive}
           onTabClose={id => closeTab(id, rightTabs, setRightTabs, rightActive, setRightActive)}
-          onTabAdd={e => showHostPicker("right", e)}
+          onTabAdd={() => addHostSelection("right")}
+          hosts={propHosts}
+          connecting={connectingByTab[rightTab?.id ?? ""] ?? null}
+          onConnectHost={(host, tabId) => void handleHostConnect(host, "right", tabId)}
           onInputChange={(tid, v) => setRightTabs(prev => prev.map(t => t.id === tid ? { ...t, input: v } : t))}
           onNavigate={(tid, p) => navigateTo(tid, p, setRightTabs, rightTabsRef)}
           onBack={tid => goBack(tid, setRightTabs, rightTabsRef)}
@@ -2475,7 +2565,7 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
               : effTotal > 0 ? Math.min(100, Math.round(effXfer / effTotal * 100)) : 0;
             const remain = effStatus === "running" && effTotal > effXfer && effSpeed > 0
               ? fmtRemain(effTotal - effXfer, effSpeed) : "—";
-            const elapsed = fmtElapsed(t.elapsedMs ?? (Date.now() - t.startedAt));
+            const elapsed = fmtElapsed(transferElapsed(t));
             const sizeText = t.status === "done"
               ? (effTotal > 0 ? fmtSize(effTotal) : effXfer > 0 ? fmtSize(effXfer) : "—")
               : effTotal > 0
@@ -2493,12 +2583,13 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
                   <div className="sftp-xfer-cell xc-name">
                     {t.isDir && (t.subFiles?.length ?? 0) > 0 ? (
                       <button className="sftp-xfer-expand"
+                        aria-expanded={isExpanded}
                         onClick={e => { e.stopPropagation();
                           setExpandedXfers(prev => {
                             const s = new Set(prev);
                             s.has(t.id) ? s.delete(t.id) : s.add(t.id); return s;
                           }); }}>
-                        {isExpanded ? "▾" : "▸"}
+                        <TransferChevron expanded={isExpanded}/>
                       </button>
                     ) : <span style={{ width: 14, flexShrink: 0 }}/>}
                     <span className={`sftp-xfer-dir ${t.direction}`}>
@@ -2575,7 +2666,7 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
                     const sfPct     = sf.total > 0 ? Math.min(100, Math.round(sf.transferred / sf.total * 100)) : 0;
                     const sfSize    = sf.status === "done" ? fmtSize(sf.total)
                       : sf.total > 0 ? `${fmtSize(sf.transferred)} / ${fmtSize(sf.total)}` : "—";
-                    const sfElapsed = sf.status !== "pending" ? fmtElapsed(sf.elapsedMs ?? (Date.now() - sf.startedAt)) : "—";
+                    const sfElapsed = sf.status !== "pending" ? fmtElapsed(transferElapsed(sf)) : "—";
                     const sfRemain  = sf.status === "running" && sf.total > sf.transferred && sf.speed > 0
                       ? fmtRemain(sf.total - sf.transferred, sf.speed) : "—";
                     const sfSrc = `${srcBase}/${sf.relPath}`;
@@ -2627,11 +2718,8 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
                       const isFolderExpanded = expandedSubFolders.get(t.id)?.has(folderName) ?? false;
                       const folderRemain = anyRunning && folderSpeed > 0 && folderTotal > folderXfer
                         ? fmtRemain(folderTotal - folderXfer, folderSpeed) : "—";
-                      const folderElapsed = allDone
-                        ? fmtElapsed(Math.max(...files.map(f => f.elapsedMs ?? 0)))
-                        : folderStatus !== "pending"
-                          ? fmtElapsed(Date.now() - Math.min(...files.filter(f => f.status !== "pending").map(f => f.startedAt)))
-                          : "—";
+                      const folderElapsed = folderStatus !== "pending"
+                        ? fmtElapsed(Math.max(...files.filter(f => f.status !== "pending").map(f => transferElapsed(f)))) : "—";
                       const folderSrc = `${srcBase}/${folderName}`;
                       const folderDst = `${dstBase}/${folderName}`;
                       const runningFiles = files.filter(f => f.status !== "done");
@@ -2646,8 +2734,9 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
                             style={{ cursor: "pointer" }}>
                             <div className="sftp-xfer-cell xc-name" style={{ gap: 5 }}>
                               <button className="sftp-xfer-expand" tabIndex={-1}
+                                aria-expanded={isFolderExpanded}
                                 onClick={e => { e.stopPropagation(); toggleSubFolder(t.id, folderName); }}>
-                                {isFolderExpanded ? "▾" : "▸"}
+                                <TransferChevron expanded={isFolderExpanded}/>
                               </button>
                               <span className={`sftp-xfer-subrow-dot ${folderDotStatus}`}/>
                               <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style={{ flexShrink: 0, opacity: 0.75 }}>
@@ -2696,7 +2785,7 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
 
           {/* Transfer */}
           {(() => {
-            const canTransfer = otherTab &&
+            const canTransfer = otherTab && !otherTab.selectingHost &&
               ctxMenu.entries.length > 0 &&
               ((!ctxTab.sftpId && otherTab.sftpId) || (ctxTab.sftpId && !otherTab.sftpId));
             if (!canTransfer) return null;
@@ -2752,7 +2841,7 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
           {ctxTab.sftpId && ctxMenu.entries.length > 0 && (
             <div className="ctx-item ctx-item--has-sub">
               <span>{i18nT("sftp.menu.compress")}</span>
-              <span className="ctx-sub-arrow">▶</span>
+              <span className="ctx-sub-arrow" aria-hidden="true">›</span>
               <div className="ctx-sub">
                 <div className="ctx-item"
                   onClick={() => handleCompress("tar.gz", ctxTab, ctxSetTabs, ctxMenu.entries)}>
@@ -2791,7 +2880,7 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
           <div className="ctx-divider"/>
           <div className="ctx-item ctx-item--has-sub">
             <span>{i18nT("sftp.menu.new")}</span>
-            <span className="ctx-sub-arrow">▶</span>
+            <span className="ctx-sub-arrow" aria-hidden="true">›</span>
             <div className="ctx-sub">
               <div className="ctx-item" onClick={() => ctxTab.sftpId
                 ? handleRemoteMkdir(ctxTab, ctxSetTabs)
@@ -2972,57 +3061,6 @@ function SftpView({ sessionId: _sessionId, hostname: _hostname, hosts: propHosts
               }}>{i18nT("sftp.menu.delete")}</div>
             </>;
           })()}
-        </div>,
-        document.body
-      )}
-
-      {/* Host picker rendered in a body portal. */}
-      {picker && createPortal(
-        <div ref={pickerRef} className="sftp-picker"
-          style={{ position: "fixed", left: picker.x, top: picker.y, zIndex: 99999 }}
-          onMouseDown={e => e.stopPropagation()}>
-          <div className="sftp-picker-header">
-            {i18nT("sftp.picker.connectSide", { side: pickerPane === "left" ? i18nT("sftp.picker.side.left") : i18nT("sftp.picker.side.right") })}
-          </div>
-          <div className="sftp-picker-search">
-            <div className="proto-prefix-wrap" ref={pickerProtoRef}>
-              <button
-                className="proto-prefix-btn proto-prefix-btn--compact"
-                onClick={() => setPickerProtoDropOpen(v => !v)}
-                data-tooltip={i18nT("sftp.picker.switchType")}
-              >
-                <span className="proto-prefix-icon">
-                  {SFTP_PICKER_PROTOS.find(p => p.value === pickerProtoFilter)?.icon ?? pickerProtos[0]?.icon ?? "≡"}
-                </span>
-                <span className="proto-prefix-arrow">▾</span>
-              </button>
-              {pickerProtoDropOpen && (
-                <div className="proto-prefix-drop proto-prefix-drop--sidebar">
-                  {pickerProtos.map(p => (
-                    <div
-                      key={p.value}
-                      className={`proto-prefix-drop-item${pickerProtoFilter === p.value ? " active" : ""}`}
-                      onClick={() => { setPickerProtoFilter(p.value); setPickerProtoDropOpen(false); }}
-                    >
-                      <span className="proto-drop-icon">{p.icon}</span>
-                      <span>{p.label}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <input autoFocus placeholder={i18nT("host.searchPlaceholder")}
-              value={pickerSearch}
-              onChange={e => setPickerSearch(e.target.value)}/>
-          </div>
-          <div className="sftp-picker-scroll">
-            {pickerHosts.length === 0
-              ? <div className="sftp-picker-empty">{i18nT("sftp.loading")}</div>
-              : <HostPickerTree hosts={pickerHosts} search={pickerSearch}
-                  protoFilter={pickerProtoFilter}
-                  onConnect={handleHostConnect} connecting={connecting}/>
-            }
-          </div>
         </div>,
         document.body
       )}

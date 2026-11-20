@@ -4,6 +4,18 @@ import { invoke } from "@tauri-apps/api/core";
 
 export const windowReady: Promise<void> = (async () => {
   const win = getCurrentWindow();
+  if (/win/i.test(navigator.platform || navigator.userAgent || "")) {
+    // Native placement restores normal bounds and maximization atomically.
+    // Do not also restore the plugin cache or maximize again from JavaScript.
+    try {
+      await invoke("window_restore_state");
+    } catch (error) {
+      console.error("Failed to restore window placement", error);
+      await win.center().catch(() => {});
+      await win.show().catch(() => {});
+    }
+    return;
+  }
   const raw = await invoke<string | null>("settings_get", { key: "app.wasMaximized" }).catch(() => null);
   const wasMaximized = raw === "true";
 

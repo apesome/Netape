@@ -1,7 +1,4 @@
 //! Terminal keyword highlighting rules.
-//!
-//! Port of `app.termora.highlight.KeywordHighlight` and
-//! `app.termora.highlight.KeywordHighlightManager`.
 
 use netape_store::{db::Store, model::{new_id, AccountOwner, DataType}};
 use serde::{Deserialize, Serialize};
@@ -14,8 +11,6 @@ fn now_ms() -> i64 {
 }
 
 /// Whether the rule highlights matching lines or filters them out.
-///
-/// Port of `app.termora.highlight.KeywordHighlightType`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum HighlightType {
     #[default]
@@ -26,8 +21,6 @@ pub enum HighlightType {
 /// A single keyword-highlight / filter rule.
 ///
 /// Colours are stored as ARGB integers (0 means "use default theme colour").
-///
-/// Port of `app.termora.highlight.KeywordHighlight`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KeywordHighlight {
@@ -101,8 +94,6 @@ impl KeywordHighlight {
 }
 
 /// CRUD facade for [`KeywordHighlight`] rules.
-///
-/// Port of `app.termora.highlight.KeywordHighlightManager`.
 pub struct HighlightManager<'a> {
     store: &'a Store,
     owner: &'a AccountOwner,

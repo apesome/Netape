@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
@@ -6,8 +6,10 @@ import { LogicalSize } from "@tauri-apps/api/dpi";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { windowReady } from "./windowInit";
 import { loadTreeExpanded } from "./store/treeStore";
+import { loadRecentHosts, recordRecentHost } from "./store/recentHosts";
 
 import Sidebar from "./components/Sidebar";
+import { SidebarPanelIcon } from "./components/icons";
 import TerminalView from "./components/TerminalView";
 import SshTerminalView from "./components/SshTerminalView";
 import ServerStatsBar from "./components/ServerStatsBar";
@@ -16,13 +18,18 @@ import SshConnectingOverlay from "./components/SshConnectingOverlay";
 import SftpView from "./components/SftpView";
 import WelcomeTab from "./components/WelcomeTab";
 import HostDialog from "./components/HostDialog";
+import NameDialog from "./components/NameDialog";
+import TabContextMenu, { type TabAction } from "./components/TabContextMenu";
+import TerminalProperties from "./components/TerminalProperties";
+const AiPanel = lazy(() => import("./components/AiPanel"));
+import { AiIcon, aiLabel } from "./components/AiCommon";
+import type { TerminalApi } from "./ai";
+import { updateRightDrawer, type RightDrawer, type RightDrawers } from "./rightDrawer";
 import NewGroupDialog from "./components/NewGroupDialog";
 import NewTerminalDialog from "./components/NewTerminalDialog";
 import KeyboardInteractiveDialog from "./components/KeyboardInteractiveDialog";
-import KeyManagerDialog from "./components/KeyManagerDialog";
-import SettingsDialog from "./components/SettingsDialog";
+import SettingsDialog, { type SettingsSection } from "./components/SettingsDialog";
 import NoteDialog from "./components/NoteDialog";
-import KeyHighlightDialog from "./components/KeyHighlightDialog";
 import GlobalTooltip from "./components/Tooltip";
 import GlobalToast, { toast } from "./components/Toast";
 import ConfirmDialog, { useConfirm } from "./components/ConfirmDialog";
@@ -49,10 +56,10 @@ interface Tab {
   sshCompleting?: boolean; // connection succeeded, animating to 100% before switching
   disconnected?: boolean;  // session dropped after a successful connect
   transport?: "ssh" | "telnet"; // for "ssh"-kind tabs: which backend transport
+  terminalGeneration?: number;
 }
 
-let _seq = 0;
-const uid = () => `tab-${++_seq}`;
+const uid = () => `tab-${crypto.randomUUID()}`;
 const WELCOME_ID  = "welcome";
 const SFTP_PIN_ID = "sftp-pinned";
 
@@ -131,27 +138,15 @@ const handleEditableShortcut = async (e: KeyboardEvent, target: HTMLElement) => 
 // ── Toolbar SVG icons (stroke-based, transparent background) ─────────────
 
 const TbNote = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M2.5 3.5h3.2c.92 0 1.78.36 2.3 1 .52-.64 1.38-1 2.3-1h3.2v8.2h-3.2c-.92 0-1.78.36-2.3 1-.52-.64-1.38-1-2.3-1H2.5z"/>
-    <path d="M8 4.5v8.1"/>
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 6V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6"/>
+    <path d="M7 7h5M7 11h3"/>
+    <path d="m12 16 .8-4.4 5.3-5.3a2.5 2.5 0 0 1 3.6 3.5l-5.3 5.3L12 16Zm4.6-8.2 3.6 3.5" strokeWidth="2.3" fill="var(--panel)"/>
   </svg>
 );
 const TbSftp = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M5 10.5V3M2.5 5.5L5 3L7.5 5.5"/><path d="M11 5.5V13M8.5 10.5L11 13L13.5 10.5"/>
-  </svg>
-);
-const TbKeyword = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M8 1.5a4 4 0 0 1 2.5 7.1V10a.5.5 0 0 1-.5.5h-4A.5.5 0 0 1 5.5 10V8.6A4 4 0 0 1 8 1.5z"/>
-    <path d="M6 11.5h4M6.5 13h3"/>
-  </svg>
-);
-const TbKey = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="5" r="3"/>
-    <path d="M9 7L3 13"/>
-    <path d="M6.5 9.5l1.5 1.5M5 11l1.5 1.5"/>
   </svg>
 );
 const TbSettings = () => (
@@ -208,9 +203,7 @@ interface ToolAction {
   toggle?: boolean;
 }
 
-interface TerminalAPI {
-  write: (data: string) => void;
-}
+type TerminalAPI = TerminalApi;
 
 const DEFAULT_TERM_SETTINGS: TerminalSettings = {
   font: "",
@@ -430,6 +423,7 @@ export default function App() {
 
   // Pointer-based tab drag with ghost element for visual feedback
   const startTabDrag = useCallback((e: React.PointerEvent, tabId: string) => {
+    if (e.button !== 0) return;
     if (tabId === WELCOME_ID) return;
     // Ignore clicks on buttons inside the tab (e.g. close ×) — they handle their own events.
     // Also: calling preventDefault() on pointerdown suppresses mousedown per spec,
@@ -524,8 +518,21 @@ export default function App() {
   }, []);
 
   // System sidebar (process / docker) per SSH tab
-  const [sysTabId,      setSysTabId]     = useState<string | null>(null);
+  const [rightDrawers, setRightDrawers] = useState<RightDrawers>({});
+  const [aiTabs, setAiTabs] = useState<Set<string>>(new Set());
+  const [aiWidth, setAiWidth] = useState(460);
+  const toggleAi = (tabId: string) => {
+    setAiTabs(previous => new Set(previous).add(tabId));
+    setRightDrawers(previous => updateRightDrawer(previous, tabId, "ai", true));
+  };
+  const openRightDrawer = useCallback((tabId: string, drawer: RightDrawer, toggle = false) => {
+    setRightDrawers(previous => updateRightDrawer(previous, tabId, drawer, toggle));
+  }, []);
+  const closeRightDrawer = useCallback((tabId: string) => {
+    setRightDrawers(previous => updateRightDrawer(previous, tabId, null));
+  }, []);
   const [sysbarWidth,   setSysbarWidth]  = useState(420);
+  const [statsBarVisibleByTab, setStatsBarVisibleByTab] = useState<Record<string, boolean>>({});
 
   // Per-tab search state
   type FindApi = { findNext: (q: string) => void; findPrev: (q: string) => void; clearHighlight: () => void };
@@ -658,17 +665,55 @@ export default function App() {
   const [hostDialogSeed, setHostDialogSeed] = useState<Host | undefined>();
   const [showHostDialog, setShowHostDialog] = useState(false);
   const [hostDialogMode, setHostDialogMode] = useState<"dialog" | "drawer">("dialog");
+  const [hostDrawerTabId, setHostDrawerTabId] = useState<string | null>(null);
   const [hostDrawerWidth, setHostDrawerWidth] = useState(460);
+  const [tabContext, setTabContext] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [renameTabId, setRenameTabId] = useState<string | null>(null);
+  const connectionAttempts = useRef(new Map<string, number>());
+  const reconnectingTabs = useRef(new Set<string>());
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
   const [showNewGroupDialog, setShowNewGroupDialog] = useState(false);
   const [newTermOpen, setNewTermOpen] = useState(false);
-  const [showKeyMgr, setShowKeyMgr] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>("appearance");
   const [uiTheme, setUiTheme] = useState<"dark" | "light">("dark");
-  const [showNote, setShowNote] = useState(false);
-  const [noteDrawerWidth, setNoteDrawerWidth] = useState(700);
-  // Panel mode only for terminal tabs (ssh/local/telnet); sftp and welcome use dialog
-  const isNotePanel = showNote && ["ssh", "local", "telnet"].includes(tabs.find(t => t.id === activeId)?.kind ?? "");
-  const [showHighlight, setShowHighlight] = useState(false);
+  const noteDrawerTabIds = new Set(Object.keys(rightDrawers).filter(id => rightDrawers[id] === "notes"));
+  const [noteModalTabId, setNoteModalTabId] = useState<string | null>(null);
+  const [noteDrawerWidth, setNoteDrawerWidth] = useState(460);
+
+  useEffect(() => {
+    const tabIds = new Set(tabs.map(tab => tab.id));
+    setRightDrawers(previous => {
+      const next = Object.fromEntries(Object.entries(previous).filter(([id]) => tabIds.has(id)));
+      return Object.keys(next).length === Object.keys(previous).length ? previous : next;
+    });
+    setNoteModalTabId(previous => previous && !tabIds.has(previous) ? null : previous);
+    setAiTabs(previous => {
+      const next = new Set([...previous].filter(id => tabIds.has(id)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [tabs]);
+
+  const toggleNotes = useCallback((tabId: string) => {
+    const tab = tabs.find(item => item.id === tabId);
+    if (tab && ["ssh", "local"].includes(tab.kind)) {
+      openRightDrawer(tabId, "notes", true);
+      setNoteModalTabId(null);
+    } else {
+      setNoteModalTabId(previous => previous === tabId ? null : tabId);
+    }
+  }, [tabs, openRightDrawer]);
+
+  useEffect(() => {
+    if (hostDrawerTabId && (hostDrawerTabId !== activeId || rightDrawers[hostDrawerTabId] !== "host")) {
+      setRightDrawers(previous => previous[hostDrawerTabId] === "host"
+        ? updateRightDrawer(previous, hostDrawerTabId, null) : previous);
+      setShowHostDialog(false);
+      setHostDialogMode("dialog");
+      setHostDrawerTabId(null);
+    }
+  }, [activeId, hostDrawerTabId, rightDrawers]);
 
   // Connection error toast (for unsupported protocols, etc.)
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -734,10 +779,6 @@ export default function App() {
 
         setIsWindowMaximized(maximized);
         if (!isMac) {
-          invoke("settings_set", {
-            key: "app.wasMaximized",
-            value: String(maximized),
-          }).catch(() => {});
           return;
         }
 
@@ -797,6 +838,7 @@ export default function App() {
       await syncWindowChromeState();
       // Restore host tree expanded state from DB
       void loadTreeExpanded();
+      void loadRecentHosts();
       unlistenFns.push(await win.onResized(() => {
         if (!ready || disposed) return;
         void syncWindowChromeState();
@@ -895,15 +937,16 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // register once; state is read via ref
 
-  // Custom close button uses an explicit path because `close()` can feel
-  // unreliable in `tauri dev` when the close-request event chain is involved.
+  // Use the normal close-request flow so Tauri can close the webview and
+  // notify window lifecycle listeners before destroying the native window.
   const handleWindowClose = useCallback(async () => {
     if (backgroundRunningRef.current) {
+      await invoke("window_save_state").catch(() => {});
       await appWindow.hide();
-      toast("Netape is still running in the background.");
+      toast(t("app.window.backgroundRunning"), "info");
       return;
     }
-    await appWindow.destroy();
+    await appWindow.close();
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -1027,6 +1070,7 @@ export default function App() {
       if (showHostDialog && hostDialogMode === "drawer") {
         setShowHostDialog(false);
         setHostDialogMode("dialog");
+        setHostDrawerTabId(null);
       }
     }
     // Terminal font/size/cursor → update live
@@ -1254,6 +1298,7 @@ export default function App() {
           options: { encoding: "UTF-8", heartbeatInterval: 30, tags: [], extras: {}, startupCommand: "", env: "", jumpHosts: [], sftpDefaultDirectory: "" },
           tunnelings: [], sort: 0, parentId: "0", ownerId: "0", creatorId: "0", ownerType: "", deleted: false, createDate: 0, updateDate: 0 });
         setHostDialogMode("dialog");
+        setHostDrawerTabId(null);
         setShowHostDialog(true);
       }
       // Ctrl+W: close the current tab
@@ -1284,10 +1329,8 @@ export default function App() {
       }
       if (ctrl && e.shiftKey && e.key.toLowerCase() === "b") { e.preventDefault(); toggleSidebar(); }
       if (ctrl && e.shiftKey && e.key.toLowerCase() === "g") { e.preventDefault(); activateSftpTabRef.current(); }
-      if (ctrl && e.shiftKey && e.key.toLowerCase() === "k") { e.preventDefault(); setShowKeyMgr(true); }
       if (ctrl && e.shiftKey && e.key.toLowerCase() === "s") { e.preventDefault(); setShowSettings(true); }
-      if (ctrl && e.shiftKey && e.key.toLowerCase() === "p") { e.preventDefault(); setShowNote(true); }
-      if (ctrl && e.shiftKey && e.key.toLowerCase() === "h") { e.preventDefault(); setShowHighlight(true); }
+      if (ctrl && e.shiftKey && e.key.toLowerCase() === "p") { e.preventDefault(); toggleNotes(activeId); }
       if (ctrl && e.key.toLowerCase() === "t") { e.preventDefault(); openLocalTerminal(); }
       // Ctrl+R: reconnect the current SSH / Telnet tab
       if (ctrl && !e.shiftKey && e.key.toLowerCase() === "r") {
@@ -1302,7 +1345,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [toggleSidebar, toggleFullscreen, handleSplit, tabs, activeId, confirmClose, confirm]);
+  }, [toggleSidebar, toggleFullscreen, handleSplit, tabs, activeId, confirmClose, confirm, toggleNotes]);
 
   // ---------------------------------------------------------------------------
   // Terminal API registration
@@ -1354,8 +1397,12 @@ export default function App() {
     params: Record<string, unknown>,
     closeCmd: string,
   ) => {
+    const attempt = (connectionAttempts.current.get(tabId) ?? 0) + 1;
+    connectionAttempts.current.set(tabId, attempt);
+    const stillCurrent = () => connectionAttempts.current.get(tabId) === attempt;
     try {
       const sessionId = await invoke<string>(command, { params });
+      if (!stillCurrent()) { void invoke(closeCmd, { sessionId }).catch(() => {}); return false; }
       setTabs((prev) => {
         if (!prev.some((t) => t.id === tabId)) {
           invoke(closeCmd, { sessionId }).catch(() => {});
@@ -1364,6 +1411,7 @@ export default function App() {
         return prev.map((t) => t.id === tabId ? { ...t, sshCompleting: true } : t);
       });
       await new Promise<void>((r) => setTimeout(r, 450));
+      if (!stillCurrent()) { void invoke(closeCmd, { sessionId }).catch(() => {}); return false; }
       setTabs((prev) => {
         if (!prev.some((t) => t.id === tabId)) return prev;
         return prev.map((t) => t.id === tabId
@@ -1373,6 +1421,7 @@ export default function App() {
       });
       return true;
     } catch (e) {
+      if (!stillCurrent()) return false;
       setTabs((prev) => prev.map((t) =>
         t.id === tabId ? { ...t, sshError: String(e), sessionId: undefined, sshCompleting: false } : t
       ));
@@ -1384,34 +1433,9 @@ export default function App() {
     connectTransport(tabId, "telnet_connect", buildTelnetParams(host), "telnet_close"),
     [connectTransport]);
 
-  const connectSsh = useCallback(async (tabId: string, host: Host) => {
-    try {
-      const sessionId = await invoke<string>("ssh_connect", { params: buildSshParams(host) });
-      // Signal overlay to animate to 100% first
-      setTabs((prev) => {
-        if (!prev.some((t) => t.id === tabId)) {
-          invoke("ssh_close", { sessionId }).catch(() => {});
-          return prev;
-        }
-        return prev.map((t) => t.id === tabId ? { ...t, sshCompleting: true } : t);
-      });
-      // Wait for the fill animation to finish, then switch to terminal
-      await new Promise<void>((r) => setTimeout(r, 450));
-      setTabs((prev) => {
-        if (!prev.some((t) => t.id === tabId)) return prev;
-        return prev.map((t) => t.id === tabId
-          ? { ...t, sessionId, sshError: undefined, sshCompleting: false, disconnected: false }
-          : t
-        );
-      });
-      return true;
-    } catch (e) {
-      setTabs((prev) => prev.map((t) =>
-        t.id === tabId ? { ...t, sshError: String(e), sessionId: undefined, sshCompleting: false } : t
-      ));
-      return false;
-    }
-  }, []);
+  const connectSsh = useCallback((tabId: string, host: Host) =>
+    connectTransport(tabId, "ssh_connect", buildSshParams(host), "ssh_close"),
+    [connectTransport]);
 
   // Auto-reconnect on session drop: up to 3 attempts with 1 s / 2 s / 3 s
   // delays.  Shows the connecting overlay while retrying; after 3 failures the
@@ -1419,8 +1443,10 @@ export default function App() {
   const autoReconnect = useCallback(async (
     tabId: string, host: Host, transport: "ssh" | "telnet",
   ) => {
+    let attempt = connectionAttempts.current.get(tabId);
     for (let i = 1; i <= 3; i++) {
       await new Promise<void>(r => setTimeout(r, 1000 * i));
+      if (connectionAttempts.current.get(tabId) !== attempt || !tabsRef.current.some(tab => tab.id === tabId)) return;
       // Reset to connecting overlay before each attempt
       setTabs(prev => prev.map(t => t.id === tabId
         ? { ...t, sessionId: undefined, sshError: undefined, sshCompleting: false, disconnected: false }
@@ -1429,27 +1455,14 @@ export default function App() {
       const ok = transport === "telnet"
         ? await connectTelnet(tabId, host)
         : await connectSsh(tabId, host);
+      if (connectionAttempts.current.get(tabId) !== (attempt ?? 0) + 1) return;
+      attempt = connectionAttempts.current.get(tabId);
       if (ok) return;
       // Brief pause to let the user read the error before the next attempt
       if (i < 3) await new Promise<void>(r => setTimeout(r, 800));
     }
     // All 3 attempts failed — the overlay already shows sshError + manual reconnect button
   }, [connectSsh, connectTelnet]);
-
-  reconnectCurrentRef.current = () => {
-    const tab = tabs.find(t => t.id === activeId);
-    if (!tab || tab.kind !== "ssh" || !tab.host) return;
-    if (tab.sessionId) {
-      const cmd = tab.transport === "telnet" ? "telnet_close" : "ssh_close";
-      invoke(cmd, { sessionId: tab.sessionId }).catch(() => {});
-    }
-    setTabs(prev => prev.map(t => t.id === activeId
-      ? { ...t, sessionId: undefined, sshError: undefined, sshCompleting: false, disconnected: false }
-      : t
-    ));
-    if (tab.transport === "telnet") connectTelnet(tab.id, tab.host!);
-    else connectSsh(tab.id, tab.host!);
-  };
 
   // ---------------------------------------------------------------------------
   // Open host
@@ -1464,6 +1477,7 @@ export default function App() {
       return;
     }
 
+    recordRecentHost(host.id);
     const id = uid();
     if (def.tab.kind === "local") {
       setTabs((prev) => [...prev, { id, kind: "local", title: host.name, protocol: host.protocol, host }]);
@@ -1511,6 +1525,9 @@ export default function App() {
     if (id === WELCOME_ID) return;
     const closing = tabs.find((t) => t.id === id);
     if (closing?.pinned) return;
+    connectionAttempts.current.set(id, (connectionAttempts.current.get(id) ?? 0) + 1);
+    tabsRef.current = tabsRef.current.filter(tab => tab.id !== id);
+    termCwds.current.delete(id);
     const closingTab = tabs.find((t) => t.id === id);
     if (closingTab?.kind === "ssh" && closingTab.sessionId) {
       const cmd = closingTab.transport === "telnet" ? "telnet_close" : "ssh_close";
@@ -1518,6 +1535,9 @@ export default function App() {
     }
     termApis.current.delete(id);
     termApis.current.delete(`${id}:split`);
+    findApisRef.current.delete(id);
+    closeRightDrawer(id);
+    setRenameTabId(previous => previous === id ? null : previous);
     setSplitMap((prev) => {
       const next = { ...prev };
       delete next[id];
@@ -1540,7 +1560,7 @@ export default function App() {
       }
       return next;
     });
-  }, [tabs, activeId, recentActive]);
+  }, [tabs, activeId, recentActive, closeRightDrawer]);
   removeTabRef.current = removeTab;
 
   const closeTab = useCallback(async (id: string, e: React.MouseEvent) => {
@@ -1552,9 +1572,65 @@ export default function App() {
     removeTab(id);
   }, [confirmClose, confirm, removeTab]);
 
+  const reconnectTab = async (id: string) => {
+    const tab = tabsRef.current.find(item => item.id === id);
+    if (!tab || !["ssh", "local"].includes(tab.kind)) return;
+    if (tab.kind === "local") {
+      setTabs(previous => previous.map(item => item.id === id
+        ? { ...item, terminalGeneration: (item.terminalGeneration ?? 0) + 1 } : item));
+      return;
+    }
+    if (!tab.host) return;
+    if (reconnectingTabs.current.has(id)) return;
+    reconnectingTabs.current.add(id);
+    connectionAttempts.current.set(id, (connectionAttempts.current.get(id) ?? 0) + 1);
+    // Invalidate old terminal callbacks before awaiting the remote close.
+    tabsRef.current = tabsRef.current.map(item => item.id === id ? { ...item, sessionId: undefined } : item);
+    setTabs(previous => previous.map(item => item.id === id
+      ? { ...item, sessionId: undefined, disconnected: false, sshError: undefined, sshCompleting: false } : item));
+    try {
+      if (tab.sessionId) await invoke(tab.transport === "telnet" ? "telnet_close" : "ssh_close", { sessionId: tab.sessionId }).catch(() => {});
+      if (!tabsRef.current.some(item => item.id === id)) return;
+      if (tab.transport === "telnet") await connectTelnet(id, tab.host);
+      else await connectSsh(id, tab.host);
+    } finally { reconnectingTabs.current.delete(id); }
+  };
+  reconnectCurrentRef.current = () => { void reconnectTab(activeId); };
+
+  const handleTabAction = async (id: string, action: TabAction) => {
+    const tab = tabsRef.current.find(item => item.id === id);
+    if (!tab || !["ssh", "local"].includes(tab.kind)) return;
+    if (action === "properties") { setActiveId(id); openRightDrawer(id, "properties"); return; }
+    if (action === "rename") { setRenameTabId(id); return; }
+    if (action === "duplicate") {
+      const copyId = uid();
+      const copy: Tab = { id: copyId, kind: tab.kind, title: tab.title, titleKey: tab.titleKey,
+        host: tab.host ? structuredClone(tab.host) : undefined, protocol: tab.protocol, transport: tab.transport };
+      setTabs(previous => [...previous, copy]);
+      setActiveId(copyId);
+      if (copy.kind === "ssh" && copy.host) {
+        if (copy.transport === "telnet") void connectTelnet(copyId, copy.host);
+        else void connectSsh(copyId, copy.host);
+      }
+      return;
+    }
+    if (action === "reconnect") { await reconnectTab(id); return; }
+    const ids = tabsRef.current.filter(item => !item.pinned && ["ssh", "local"].includes(item.kind)
+      && (action === "close" ? item.id === id : action === "closeOthers" ? item.id !== id : true)).map(item => item.id);
+    if (!ids.length) return;
+    if (confirmClose && !await confirm(t(ids.length === 1 ? "app.confirm.closeTab" : "tabMenu.confirmCloseMany", { count: ids.length }))) return;
+    for (const targetId of ids) removeTab(targetId);
+    if (action === "closeOthers") setActiveId(id);
+    if (action === "closeAll") setActiveId(WELCOME_ID);
+  };
+
   // ---------------------------------------------------------------------------
   // Host dialog
   // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    setTabContext(null);
+  }, [activeId, tabs]);
 
   const [newHostProtocol, setNewHostProtocol] = useState("SSH");
   const openNewHost = (parentId = "0", protocol?: string, mode: "dialog" | "drawer" = "dialog") => {
@@ -1568,6 +1644,8 @@ export default function App() {
       tunnelings: [], sort: 0, parentId, ownerId: "0", creatorId: "0", ownerType: "", deleted: false,
       createDate: 0, updateDate: 0 });
     setHostDialogMode(mode);
+    setHostDrawerTabId(mode === "drawer" ? activeId : null);
+    if (mode === "drawer") openRightDrawer(activeId, "host");
     setShowHostDialog(true);
   };
   const openNewFolder = async (parentId: string, name: string, protocol = "SSH") => {
@@ -1582,9 +1660,26 @@ export default function App() {
       setHostsVersion((n) => n + 1);
     } catch (e) { toast(String(e)); }
   };
-  const openEditHost = (host: Host) => { setHostDialogSeed(host); setHostDialogMode("dialog"); setShowHostDialog(true); };
-  const openEditHostDrawer = (host: Host) => { setHostDialogSeed(host); setHostDialogMode("drawer"); setShowHostDialog(true); };
-  const handleHostSaved = () => { setShowHostDialog(false); setHostDialogMode("dialog"); setHostsVersion((n) => n + 1); };
+  const openEditHost = (host: Host) => {
+    setHostDialogSeed(host);
+    setHostDialogMode("dialog");
+    setHostDrawerTabId(null);
+    setShowHostDialog(true);
+  };
+  const openEditHostDrawer = (host: Host) => {
+    setHostDialogSeed(host);
+    setHostDialogMode("drawer");
+    setHostDrawerTabId(activeId);
+    openRightDrawer(activeId, "host");
+    setShowHostDialog(true);
+  };
+  const handleHostSaved = () => {
+    if (hostDrawerTabId) closeRightDrawer(hostDrawerTabId);
+    setShowHostDialog(false);
+    setHostDialogMode("dialog");
+    setHostDrawerTabId(null);
+    setHostsVersion((n) => n + 1);
+  };
   const handleHostDeleted = () => setHostsVersion((n) => n + 1);
 
   // ---------------------------------------------------------------------------
@@ -1609,7 +1704,8 @@ export default function App() {
 
     // Auto-connect only when coming from a connected SSH terminal (not telnet)
     if (current?.kind === "ssh" && current.transport !== "telnet" && current.host && current.sessionId) {
-      // Priority: OSC-7 / input-parsed CWD > exec-pwd (HOME) > ""
+      // OSC-7 / submitted-command tracking provides the interactive shell's CWD.
+      // A separate exec channel's pwd is only a fallback to the login home.
       let startDir = termCwds.current.get(current.id) ?? "";
       if (!startDir) {
         try { startDir = await invoke<string>("ssh_get_cwd", { sessionId: current.sessionId }); }
@@ -1621,9 +1717,7 @@ export default function App() {
   activateSftpTabRef.current = activateSftpTab;
 
   const handleToolbarAction = (id: string) => {
-    if (id === "note")       { setShowNote(true); return; }
-    if (id === "keymgr")     { setShowKeyMgr(true); return; }
-    if (id === "keyword")    { setShowHighlight(true); return; }
+    if (id === "note")       { toggleNotes(activeId); return; }
     if (id === "settings")   { setShowSettings(true); return; }
     if (id === "fullscreen") { toggleFullscreen(); return; }
     if (id === "split-h")    { handleSplit("H"); return; }
@@ -1637,8 +1731,6 @@ export default function App() {
   const TOOLBAR_ACTIONS: ToolAction[] = [
     { id: "sftp",     icon: <TbSftp />,     title: t("app.toolbar.sftp") },
     { id: "note",     icon: <TbNote />,     title: t("app.toolbar.notes") },
-    { id: "keyword",  icon: <TbKeyword />,  title: t("app.toolbar.highlight") },
-    { id: "keymgr",   icon: <TbKey />,      title: t("app.toolbar.keyManager") },
     { id: "settings", icon: <TbSettings />, title: t("app.toolbar.settings") },
   ];
 
@@ -1676,15 +1768,15 @@ export default function App() {
               reloadHosts();
             } catch (e) { toast(String(e)); }
           }}
-          onOpenKeyManager={() => setShowKeyMgr(true)}
           onOpenSettings={() => setShowSettings(true)}
         />
       );
     }
     if (tab.kind === "local") {
       return (
-        <TerminalView
-          sessionId={tab.id}
+        <div className="ai-local-terminal"><TerminalView
+          key={`${tab.id}:${tab.terminalGeneration ?? 0}`}
+          sessionId={`${tab.id}:${tab.terminalGeneration ?? 0}`}
           settings={termSettings}
           highlights={highlights}
           onRegister={(api) => termApis.current.set(tab.id, api)}
@@ -1695,7 +1787,7 @@ export default function App() {
           protocol={tab.protocol}
           wslDistro={tab.host?.host}
           localShell={tab.protocol === "Local" ? termSettings.localShell : undefined}
-        />
+        /><div className="ai-local-actions"><button className={rightDrawers[tab.id] === "properties" ? "sb-action sb-action--active" : "sb-action"} onClick={() => void handleTabAction(tab.id, "properties")} aria-label={t("tabMenu.properties")} data-tooltip={t("tabMenu.properties")}>ⓘ</button><button className={rightDrawers[tab.id] === "ai" ? "sb-action sb-action--active" : "sb-action"} onClick={() => toggleAi(tab.id)} aria-label={aiLabel("AI 助手", "AI assistant")} data-tooltip={aiLabel("AI 助手", "AI assistant")}><AiIcon/></button></div></div>
       );
     }
     if (tab.kind === "sftp") {
@@ -1713,6 +1805,7 @@ export default function App() {
     }
     if (tab.kind === "ssh") {
       const onDisconnect = () => {
+        if (tabsRef.current.find(item => item.id === tab.id)?.sessionId !== tab.sessionId) return;
         if (!tab.host || !termSettings.autoReconnect) {
           setTabs(prev => prev.map(t =>
             t.id === tab.id ? { ...t, disconnected: true } : t));
@@ -1724,13 +1817,14 @@ export default function App() {
         ));
         autoReconnect(tab.id, tab.host, tab.transport ?? "ssh");
       };
-      const sysOpen = sysTabId === tab.id && tab.transport !== "telnet";
+      const sysOpen = rightDrawers[tab.id] === "monitor" && tab.transport !== "telnet";
       return (
         <div style={{ display: "flex", width: "100%", height: "100%" }}>
           {/* Main column: terminal fills full height, stats bar floats on top */}
           <div style={{ position: "relative", flex: 1, minWidth: 0, minHeight: 0 }}>
             <SshTerminalView
               sessionId={tab.sessionId}
+              statsBarVisible={statsBarVisibleByTab[tab.id] ?? false}
               settings={termSettings}
               highlights={highlights}
               onRegister={(api) => termApis.current.set(tab.id, api)}
@@ -1753,8 +1847,14 @@ export default function App() {
               sessionId={tab.sessionId}
               host={tab.host}
               transport={tab.transport}
-              onSystem={tab.transport !== "telnet" ? () => setSysTabId(p => p === tab.id ? null : tab.id) : undefined}
+              onSystem={tab.transport !== "telnet" ? () => openRightDrawer(tab.id, "monitor", true) : undefined}
               systemOpen={sysOpen}
+              onProperties={() => { void handleTabAction(tab.id, "properties"); }}
+              propertiesOpen={rightDrawers[tab.id] === "properties"}
+              onAi={() => toggleAi(tab.id)}
+              aiOpen={rightDrawers[tab.id] === "ai"}
+              barVisible={statsBarVisibleByTab[tab.id] ?? false}
+              onBarVisibleChange={(visible) => setStatsBarVisibleByTab(p => ({ ...p, [tab.id]: visible }))}
               searchOpen={tabSearchOpen[tab.id] ?? false}
               searchQuery={tabSearchQuery[tab.id] ?? ""}
               onSearchToggle={tab.transport !== "telnet" ? () => {
@@ -1796,7 +1896,7 @@ export default function App() {
               <SysbarResizer sysbarWidth={sysbarWidth} onWidthChange={setSysbarWidth} />
               <SystemSidebar
                 sessionId={tab.sessionId}
-                onClose={() => setSysTabId(null)}
+                onClose={() => closeRightDrawer(tab.id)}
                 width={sysbarWidth}
               />
             </>
@@ -1855,8 +1955,9 @@ export default function App() {
               className="sidebar-toggle-inline"
               onClick={toggleSidebar}
               data-tooltip={t("app.sidebar.show")}
+              aria-label={t("app.sidebar.show")}
             >
-              ☰
+              <SidebarPanelIcon />
             </button>
           )}
 
@@ -1919,7 +2020,18 @@ export default function App() {
                   dragSrcId  === tab.id ? "tab--dragging"   : "",
                 ].filter(Boolean).join(" ")}
                 onClick={() => setActiveId(tab.id)}
+                onDoubleClick={event => {
+                  if ((event.target as Element).closest("button")) return;
+                  event.stopPropagation();
+                  void handleTabAction(tab.id, "duplicate");
+                }}
                 onPointerDown={e => startTabDrag(e, tab.id)}
+                onContextMenu={event => {
+                  if (!["ssh", "local"].includes(tab.kind)) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setTabContext({ id: tab.id, x: event.clientX, y: event.clientY });
+                }}
                 data-tooltip={translatedTabTitle(tab, t)}
               >
                 <span className="tab-icon">
@@ -2009,6 +2121,7 @@ export default function App() {
                   "tbaction",
                   a.disabled ? "tbaction-disabled" : "",
                   a.toggle && isFullscreen && a.id === "fullscreen" ? "tbaction-active" : "",
+                  a.id === "note" && (noteDrawerTabIds.has(activeId) || noteModalTabId === activeId) ? "tbaction-active" : "",
                 ].filter(Boolean).join(" ")}
                 data-tooltip={a.disabled ? `${a.title}` : a.title}
                 onClick={() => !a.disabled && handleToolbarAction(a.id)}
@@ -2100,7 +2213,27 @@ export default function App() {
             );
           })}
         </main>
-        {showHostDialog && hostDialogMode === "drawer" && (
+        {tabs.filter(tab => aiTabs.has(tab.id)).map(tab => {
+          const visible = tab.id === activeId && rightDrawers[tab.id] === "ai";
+          return <div key={`ai:${tab.id}`} style={{display:visible?"contents":"none"}}>
+            <HostDrawerResizer width={aiWidth} onWidthChange={setAiWidth}/>
+            <Suspense fallback={<aside className="ai-panel" style={{width:aiWidth}}/>}><AiPanel tabId={tab.id} scope={tab.host ? `host:${tab.host.id}` : `local:${tab.protocol ?? "Local"}`}
+              title={translatedTabTitle(tab,t)} protocol={tab.transport === "telnet" ? "Telnet" : tab.protocol ?? (tab.kind === "local" ? "Local" : "SSH")}
+              sessionId={tab.kind === "local" ? `${tab.id}:${tab.terminalGeneration ?? 0}` : tab.sessionId} connected={tab.kind === "local" || (!!tab.sessionId && !tab.disconnected)} visible={visible} width={aiWidth}
+              getTerminal={() => termApis.current.get(tab.id)} getCwd={() => termCwds.current.get(tab.id) ?? ""}
+              onClose={() => closeRightDrawer(tab.id)} onSettings={() => {setSettingsInitialSection("ai");setShowSettings(true);}}/></Suspense>
+          </div>;
+        })}
+        {rightDrawers[activeId] === "properties" && (() => {
+          const tab = tabs.find(item => item.id === activeId);
+          return tab ? <>
+            <HostDrawerResizer width={hostDrawerWidth} onWidthChange={setHostDrawerWidth}/>
+            <TerminalProperties key={tab.id} title={translatedTabTitle(tab, t)} protocol={tab.protocol ?? (tab.kind === "local" ? "Local" : "SSH")}
+              hosts={hosts} localShell={tab.kind === "local" ? termSettings.localShell : undefined}
+              host={tab.host} sessionId={tab.sessionId} width={hostDrawerWidth} onClose={() => closeRightDrawer(activeId)}/>
+          </> : null;
+        })()}
+        {showHostDialog && hostDialogMode === "drawer" && hostDrawerTabId === activeId && rightDrawers[activeId] === "host" && (
           <>
             <HostDrawerResizer width={hostDrawerWidth} onWidthChange={setHostDrawerWidth} />
             <HostDialog
@@ -2111,23 +2244,34 @@ export default function App() {
               initialProtocol={!hostDialogSeed?.createDate ? newHostProtocol : undefined}
               onSave={handleHostSaved}
               onClose={() => {
+                closeRightDrawer(activeId);
                 setShowHostDialog(false);
                 setHostDialogMode("dialog");
+                setHostDrawerTabId(null);
               }}
             />
           </>
         )}
-        {/* Note panel: visible when a non-welcome tab is active */}
-        {isNotePanel && (
-          <>
+        {noteDrawerTabIds.has(activeId) && (
+          <div className="note-drawer-group">
             <NoteDrawerResizer width={noteDrawerWidth} onWidthChange={setNoteDrawerWidth} />
-            <NoteDialog mode="panel" width={noteDrawerWidth} onClose={() => setShowNote(false)} />
-          </>
+            <div className="note-drawer-slot">
+              <NoteDialog width={noteDrawerWidth} onClose={() => closeRightDrawer(activeId)} />
+            </div>
+          </div>
         )}
         </div>
       </div>
 
       {/* ── Dialogs ─────────────────────────────────────────── */}
+      {tabContext && <TabContextMenu x={tabContext.x} y={tabContext.y}
+        onClose={() => setTabContext(null)} onAction={action => void handleTabAction(tabContext.id, action)}/>}
+      {renameTabId && <NameDialog title={t("tabMenu.rename")}
+        initialValue={translatedTabTitle(tabs.find(tab => tab.id === renameTabId) ?? { title: "" } as Tab, t)}
+        onClose={() => setRenameTabId(null)} onConfirm={title => {
+          setTabs(previous => previous.map(tab => tab.id === renameTabId ? { ...tab, title, titleKey: undefined } : tab));
+          setRenameTabId(null);
+        }}/>}
       {showHostDialog && hostDialogMode !== "drawer" && (
         <HostDialog
           host={hostDialogSeed}
@@ -2138,6 +2282,7 @@ export default function App() {
           onClose={() => {
             setShowHostDialog(false);
             setHostDialogMode("dialog");
+            setHostDrawerTabId(null);
           }}
         />
       )}
@@ -2159,20 +2304,15 @@ export default function App() {
           onClose={() => setNewTermOpen(false)}
         />
       )}
-      {showKeyMgr && <KeyManagerDialog onClose={() => setShowKeyMgr(false)} />}
+      {noteModalTabId === activeId && (
+        <NoteDialog mode="dialog" onClose={() => setNoteModalTabId(null)} />
+      )}
       {showSettings && (
         <SettingsDialog
-          onClose={() => setShowSettings(false)}
+          initialSection={settingsInitialSection}
+          onClose={() => { setShowSettings(false); setSettingsInitialSection("appearance"); }}
           onApply={handleSettingApply}
-        />
-      )}
-      {showNote && !isNotePanel && (
-        <NoteDialog mode="dialog" onClose={() => setShowNote(false)} />
-      )}
-      {showHighlight && (
-        <KeyHighlightDialog
-          onClose={() => setShowHighlight(false)}
-          onChange={reloadHighlights}
+          onHighlightsChange={reloadHighlights}
         />
       )}
       {/* Global SSH keyboard-interactive prompt (self-listening) */}

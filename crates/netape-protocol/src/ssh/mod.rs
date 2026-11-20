@@ -1,8 +1,5 @@
 //! SSH protocol implementation.
 //!
-//! Port of `app.termora.plugin.internal.ssh.SshClients` (Apache MINA SSHD)
-//! → russh (async, tokio).
-//!
 //! # Public API
 //!
 //! ```text
@@ -29,8 +26,6 @@ use crate::error::ProtocolResult;
 
 /// Top-level entry point: build a config from a [`netape_domain::host::Host`]
 /// and open an authenticated SSH session.
-///
-/// Port of `SshClients.openClient` + `SshClients.openSession`.
 pub async fn connect(config: &SshConfig) -> ProtocolResult<SshSession> {
     session::connect(config).await
 }

@@ -1,7 +1,5 @@
 //! SSH host / connection model.
 //!
-//! Port of `app.termora.Host` and `app.termora.HostManager`.
-//!
 //! A [`Host`] is a JSON-serialised blob stored in the `data` table under
 //! type `DataType::Host`.  [`HostManager`] is the thin CRUD layer over the
 //! [`Store`].
@@ -208,8 +206,6 @@ pub struct Tunneling {
 // ---------------------------------------------------------------------------
 
 /// An SSH / terminal connection entry.
-///
-/// Port of `app.termora.Host`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Host {
@@ -274,8 +270,6 @@ impl Host {
 // ---------------------------------------------------------------------------
 
 /// CRUD facade for [`Host`] records.
-///
-/// Port of `app.termora.HostManager`.
 pub struct HostManager<'a> {
     store: &'a Store,
     owner: &'a AccountOwner,
@@ -322,6 +316,59 @@ impl<'a> HostManager<'a> {
             fb.cmp(&fa).then(a.sort.cmp(&b.sort))
         });
         Ok(hosts)
+    }
+
+    /// Persist a complete order for siblings of one protocol and node kind.
+    pub fn reorder(&self, ids: &[String]) -> anyhow::Result<()> {
+        use std::collections::HashSet;
+        anyhow::ensure!(!ids.is_empty(), "empty host order");
+        let hosts = self.hosts()?;
+        let first = hosts.iter().find(|host| host.id == ids[0])
+            .ok_or_else(|| anyhow::anyhow!("host not found"))?;
+        let protocol = |host: &Host| {
+            if host.is_folder() {
+                if host.owner_type.is_empty() { "SSH".to_string() } else { host.owner_type.clone() }
+            } else { host.protocol.clone() }
+        };
+        let siblings: HashSet<&str> = hosts.iter().filter(|host| {
+            host.parent_id == first.parent_id && host.is_folder() == first.is_folder()
+                && protocol(host) == protocol(first)
+        }).map(|host| host.id.as_str()).collect();
+        let requested: HashSet<&str> = ids.iter().map(String::as_str).collect();
+        anyhow::ensure!(requested.len() == ids.len() && requested == siblings,
+            "host order changed; refresh and retry");
+        self.store.reorder_objects(ids, self.owner, DataType::Host)?;
+        Ok(())
+    }
+
+    /// Move a node and persist the complete destination sibling order atomically.
+    pub fn move_to(&self, id: &str, parent_id: &str, ids: &[String]) -> anyhow::Result<()> {
+        use std::collections::HashSet;
+        let hosts = self.hosts()?;
+        let source = hosts.iter().find(|host| host.id == id)
+            .ok_or_else(|| anyhow::anyhow!("host not found"))?;
+        let protocol = |host: &Host| if host.is_folder() {
+            if host.owner_type.is_empty() { "SSH" } else { host.owner_type.as_str() }.to_string()
+        } else { host.protocol.clone() };
+        let mut ancestor = parent_id;
+        let mut seen = HashSet::new();
+        while ancestor != "0" {
+            anyhow::ensure!(ancestor != id && seen.insert(ancestor), "cannot move a folder into itself or its descendants");
+            let folder = hosts.iter().find(|host| host.id == ancestor && host.is_folder())
+                .ok_or_else(|| anyhow::anyhow!("destination folder not found"))?;
+            anyhow::ensure!(protocol(folder) == protocol(source), "cannot move between protocols");
+            ancestor = if folder.parent_id.is_empty() { "0" } else { &folder.parent_id };
+        }
+        let mut siblings: HashSet<&str> = hosts.iter().filter(|host| {
+            let parent = if host.parent_id.is_empty() { "0" } else { &host.parent_id };
+            parent == parent_id && host.is_folder() == source.is_folder() && protocol(host) == protocol(source)
+        }).map(|host| host.id.as_str()).collect();
+        siblings.insert(id);
+        let requested: HashSet<&str> = ids.iter().map(String::as_str).collect();
+        anyhow::ensure!(requested.len() == ids.len() && requested == siblings,
+            "host order changed; refresh and retry");
+        self.store.reorder_and_move_objects(ids, Some((id, parent_id)), self.owner, DataType::Host)?;
+        Ok(())
     }
 
     /// Fetch a single host.
@@ -390,6 +437,65 @@ mod tests {
         mgr.add(&host).unwrap();
         mgr.remove(&id).unwrap();
         assert!(mgr.hosts().unwrap().is_empty());
+    }
+
+    #[test]
+    fn move_preserves_data_and_rejects_cycles_protocols_and_stale_orders() {
+        let (store, owner) = store();
+        let mgr = HostManager::new(&store, &owner);
+        let folder = |id: &str, parent: &str, protocol: &str| Host { id: id.into(), protocol: "Folder".into(),
+            owner_type: protocol.into(), parent_id: parent.into(), ..Default::default() };
+        let a = Host { id: "a".into(), protocol: "SSH".into(), parent_id: "work".into(), host: "example.test".into(),
+            authentication: Authentication { auth_type: AuthenticationType::Password, password: "preserved".into() }, ..Default::default() };
+        let x = Host { id: "x".into(), protocol: "SSH".into(), parent_id: "dest".into(), sort: 8, ..Default::default() };
+        for host in [folder("work","0","SSH"),folder("dest","0","SSH"),folder("child","work","SSH"),
+            folder("ftp","0","FTP"),a,x] { mgr.add(&host).unwrap(); }
+        assert!(mgr.move_to("a","dest",&["a".into()]).is_err());
+        assert!(mgr.move_to("a","ftp",&["a".into()]).is_err());
+        assert!(mgr.move_to("a","missing",&["a".into()]).is_err());
+        assert!(mgr.move_to("work","child",&["work".into()]).is_err());
+        assert!(mgr.move_to("work","work",&["work".into(),"child".into()]).is_err());
+        mgr.move_to("a","dest",&["a".into(),"x".into()]).unwrap();
+        let moved = mgr.get("a").unwrap().unwrap();
+        assert_eq!(moved.parent_id,"dest");
+        assert_eq!(moved.sort,0);
+        assert_eq!(moved.authentication.password,"preserved");
+        assert_eq!(moved.host,"example.test");
+        assert_eq!(mgr.get("x").unwrap().unwrap().sort,1);
+        assert!(store.reorder_and_move_objects(&["a".into(),"missing".into()],Some(("a","0")),&owner,DataType::Host).is_err());
+        assert_eq!(mgr.get("a").unwrap().unwrap().parent_id,"dest");
+        mgr.move_to("a","0",&["a".into()]).unwrap();
+        assert_eq!(mgr.get("a").unwrap().unwrap().parent_id,"0");
+        mgr.move_to("work","dest",&["work".into()]).unwrap();
+        assert_eq!(mgr.get("child").unwrap().unwrap().parent_id,"work");
+    }
+
+    #[test]
+    fn reorder_preserves_host_data_and_rejects_invalid_groups() {
+        let (store, owner) = store();
+        let mgr = HostManager::new(&store, &owner);
+        let first = Host { id: "a".into(), name: "first".into(), protocol: "SSH".into(),
+            parent_id: "work".into(), host: "example.test".into(),
+            authentication: Authentication { auth_type: AuthenticationType::Password, password: "unchanged".into() },
+            ..Default::default() };
+        let second = Host { id: "b".into(), name: "second".into(), protocol: "SSH".into(), parent_id: "work".into(), ..Default::default() };
+        let other = Host { id: "ftp".into(), protocol: "FTP".into(), parent_id: "work".into(), sort: 77, ..Default::default() };
+        for host in [&first, &second, &other] { mgr.add(host).unwrap(); }
+        mgr.reorder(&["b".into(), "a".into()]).unwrap();
+        let updated = mgr.get("a").unwrap().unwrap();
+        assert_eq!(updated.sort, 1);
+        assert_eq!(updated.parent_id, "work");
+        assert_eq!(updated.authentication.password, "unchanged");
+        assert_eq!(updated.host, "example.test");
+        assert_eq!(mgr.get("b").unwrap().unwrap().sort, 0);
+        assert_eq!(mgr.get("ftp").unwrap().unwrap().sort, 77);
+        for ids in [vec!["a".into()], vec!["a".into(), "a".into()], vec!["a".into(), "ftp".into()]] {
+            assert!(mgr.reorder(&ids).is_err());
+        }
+        assert_eq!(mgr.get("a").unwrap().unwrap().sort, 1);
+        // A missing row halfway through the storage batch rolls back earlier updates.
+        assert!(store.reorder_objects(&["a".into(), "missing".into()], &owner, DataType::Host).is_err());
+        assert_eq!(mgr.get("a").unwrap().unwrap().sort, 1);
     }
 }
 

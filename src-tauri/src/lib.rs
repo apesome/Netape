@@ -1,5 +1,10 @@
 mod app_state;
+mod ai;
+mod ai_usage;
+mod ai_catalog;
 mod window_cmd;
+#[cfg(windows)]
+mod window_state;
 mod encoding;
 mod file_icon;
 mod fonts_cmd;
@@ -10,6 +15,7 @@ mod highlight_cmd;
 mod hosts;
 mod keymgr_cmd;
 mod plugin;
+mod plugin_market;
 mod settings_cmd;
 mod sftp;
 mod note_cmd;
@@ -115,11 +121,11 @@ fn init_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        // Only save/restore SIZE and POSITION — exclude VISIBLE so the plugin
-        // never shows the window early (we call win.show() ourselves in windowInit.ts
-        // after centering / restoring position).
+        // Windows uses native WINDOWPLACEMENT to restore bounds and mode together.
+        // Other platforms retain the existing plugin restore flow.
         .plugin(
             tauri_plugin_window_state::Builder::default()
+                .with_denylist(if cfg!(windows) { &["main"] } else { &[] })
                 .with_state_flags(
                     tauri_plugin_window_state::StateFlags::SIZE
                         | tauri_plugin_window_state::StateFlags::POSITION,
@@ -130,6 +136,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
+            #[cfg(windows)]
+            app.manage(window_state::PlacementReady(std::sync::atomic::AtomicBool::new(false)));
             terminal::init(&app.handle());
             ssh_terminal::init(&app.handle());
             telnet::init(&app.handle());
@@ -157,10 +165,13 @@ pub fn run() {
                 {
                     let _ = win.set_decorations(false);
                 }
+                #[cfg(not(windows))]
                 let _ = win.center();
             }
 
             app.manage(app_state);
+            app.manage(ai::AiState::default());
+            app.manage(ai_catalog::CatalogState::default());
             app.manage(ssh_auth::KbiState::default());
             app.manage(ftp::FtpTunnelState::default());
             app.manage(Arc::new(sftp::ConflictState::default()));
@@ -169,7 +180,31 @@ pub fn run() {
 
             Ok(())
         })
+        .on_window_event(|window, event| {
+            #[cfg(windows)]
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Focused(false)) {
+                if let Some(webview) = window.app_handle().get_webview_window(window.label()) {
+                    if let Err(error) = window_state::save(&webview) {
+                        tracing::warn!(%error, "failed to save window placement");
+                    }
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
+            ai::ai_config_get,
+            ai_usage::ai_usage_get,
+            ai_catalog::ai_catalog_cached,
+            ai_catalog::ai_catalog_refresh,
+            ai_catalog::ai_probe,
+            ai::ai_config_save,
+            ai::ai_models,
+            ai::ai_test,
+            ai::ai_chat,
+            ai::ai_cancel,
+            ai::ai_history_list,
+            ai::ai_history_save,
+            ai::ai_history_clear,
+            ai::ai_run_ssh,
             // Local PTY
             terminal::terminal_create,
             terminal::terminal_write,
@@ -201,6 +236,8 @@ pub fn run() {
             // Hosts
             hosts::host_list,
             hosts::host_save,
+            hosts::host_reorder,
+            hosts::host_move,
             hosts::host_remove,
             // Key manager
             keymgr_cmd::key_list,
@@ -256,10 +293,14 @@ pub fn run() {
             plugin::plugins_list,
             plugin::plugins_install,
             plugin::plugins_uninstall,
-            plugin::plugins_marketplace,
-            plugin::plugins_install_market,
+            plugin_market::plugins_marketplace,
+            plugin_market::plugins_install_market,
+            plugin_market::plugins_cancel_install,
+            plugin_market::plugins_install_status,
             // Window
             window_cmd::window_set_opacity,
+            window_cmd::window_restore_state,
+            window_cmd::window_save_state,
             // Fonts / system
             fonts_cmd::system_fonts,
             fonts_cmd::terminal_beep,
@@ -289,6 +330,26 @@ pub fn run() {
             smb::smb_upload,
             smb::smb_upload_dir,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Netape");
+        .build(tauri::tauri_build_context!())
+        .expect("error while building Netape")
+        .run(|app, event| {
+            #[cfg(windows)]
+            if let tauri::RunEvent::ExitRequested { code: Some(0), api, .. } = event {
+                // An explicit app.exit(0) (for example from the tray) stops the
+                // event loop while WebView2 windows still exist. Destroy them
+                // first; the last Destroyed event will request the normal exit.
+                let windows = app.webview_windows();
+                if !windows.is_empty() {
+                    api.prevent_exit();
+                    for (_, window) in windows {
+                        if let Err(error) = window_state::save(&window) {
+                            tracing::warn!(%error, "failed to save window placement before exiting");
+                        }
+                        if let Err(error) = window.destroy() {
+                            tracing::error!(%error, "failed to close window before exiting");
+                        }
+                    }
+                }
+            }
+        });
 }

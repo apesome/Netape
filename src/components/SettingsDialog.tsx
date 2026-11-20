@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { toast } from "./Toast";
-import { setInstalledPluginProtocols, pluginSupportedOnPlatform } from "../protocols";
 import { getSystemLang, useT } from "../i18n";
 import CustomSelect from "./CustomSelect";
+import KeyManagerDialog from "./KeyManagerDialog";
+import KeyHighlightDialog from "./KeyHighlightDialog";
+import AiSettings from "./AiSettings";
+import AboutPanel from "./AboutPanel";
+import PluginSettings from "./PluginSettings";
+import { AiIcon, aiLabel } from "./AiCommon";
 
-type Section = "appearance" | "terminal" | "keyshortcuts" | "sftp" | "plugins" | "about";
+export type SettingsSection = "appearance" | "terminal" | "keyshortcuts" | "sftp" | "plugins" | "ai" | "keymgr" | "highlight" | "about";
+type Section = SettingsSection;
 
 interface DiscoveredShell {
   id: string;
@@ -14,16 +19,6 @@ interface DiscoveredShell {
   command: string;
   args: string[];
   isDefault: boolean;
-}
-
-interface PluginManifest {
-  id: string; name: string; version: string; kind: string;
-  protocol?: string; description?: string; author?: string;
-}
-
-interface MarketEntry extends PluginManifest {
-  installed: boolean;
-  installedVersion?: string;
 }
 
 interface Settings {
@@ -110,7 +105,7 @@ const FIELD_KEYS: Record<keyof Settings, string> = {
   sftpClearDone:     "Setting.SFTP.clearDone",
 };
 
-const SECTION_IDS: Section[] = ["appearance", "terminal", "keyshortcuts", "sftp", "plugins", "about"];
+const SECTION_IDS: Section[] = ["appearance", "terminal", "sftp", "ai", "keyshortcuts", "keymgr", "highlight", "plugins", "about"];
 
 const SHORTCUT_KEYS: { key: string; windows: string; mac: string }[] = [
   { key: "shortcut.newHost",          windows: "Ctrl+N",         mac: "Cmd+N" },
@@ -119,14 +114,10 @@ const SHORTCUT_KEYS: { key: string; windows: string; mac: string }[] = [
   { key: "shortcut.nextTab",          windows: "Ctrl+Tab",       mac: "Cmd+Tab" },
   { key: "shortcut.prevTab",          windows: "Ctrl+Shift+Tab", mac: "Cmd+Shift+Tab" },
   { key: "shortcut.settings",         windows: "Ctrl+Shift+S",   mac: "Cmd+Shift+S" },
-  { key: "shortcut.keyManager",       windows: "Ctrl+Shift+K",   mac: "Cmd+Shift+K" },
   { key: "shortcut.newLocalTerminal", windows: "Ctrl+T",         mac: "Cmd+T" },
   { key: "shortcut.notes",            windows: "Ctrl+Shift+P",   mac: "Cmd+Shift+P" },
   { key: "shortcut.sftp",             windows: "Ctrl+Shift+G",   mac: "Cmd+Shift+G" },
-  { key: "shortcut.highlight",        windows: "Ctrl+Shift+H",   mac: "Cmd+Shift+H" },
 ];
-
-const VERSION = "0.1.0-alpha";
 
 // ── Icons for pill selectors ─────────────────────────────────────────────
 const IcoSun = () => (
@@ -209,74 +200,26 @@ const IcoAbout = () => (
 const SECTION_ICONS: Record<Section, React.ReactNode> = {
   appearance: <IcoSun />,
   terminal: <IcoTerminal />,
+  highlight: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M9 18h6m-5 3h4M8.5 14.5a6 6 0 1 1 7 0L15 17H9l-.5-2.5Z"/></svg>,
+  keymgr: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="16" cy="8" r="5"/><path d="m12 12-9 9m0-4 4 4m0-8 4 4"/></svg>,
   keyshortcuts: <IcoShortcut />,
   sftp: <IcoTransfer />,
   plugins: <IcoPlugin />,
+  ai: <AiIcon />,
   about: <IcoAbout />,
 };
 
-export default function SettingsDialog({ onClose, onApply }: { onClose: () => void; onApply?: (key: string, value: string) => void }) {
+export default function SettingsDialog({ onClose, onApply, onHighlightsChange, initialSection = "appearance" }: { onClose: () => void; onApply?: (key: string, value: string) => void; onHighlightsChange?: () => void; initialSection?: SettingsSection }) {
   const t = useT();
   const isMac = /mac/i.test(navigator.platform || navigator.userAgent || "");
-  const [section, setSection] = useState<Section>("appearance");
+  const [section, setSection] = useState<Section>(initialSection);
+  useEffect(() => { setSection(initialSection); }, [initialSection]);
   const [s, setS] = useState<Settings>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
   const [discoveredShells, setDiscoveredShells] = useState<DiscoveredShell[]>([]);
   const [shellCustom, setShellCustom] = useState(false);
-
-  // ── Plugins ──
-  const [plugins, setPlugins] = useState<PluginManifest[]>([]);
-  const [market, setMarket] = useState<MarketEntry[]>([]);
-  const [pluginTab, setPluginTab] = useState<"market" | "installed">("market");
-  const [pluginBusy, setPluginBusy] = useState(false);
-  const loadPlugins = async () => {
-    try {
-      const list = await invoke<PluginManifest[]>("plugins_list");
-      setPlugins(list);
-      setInstalledPluginProtocols(list);   // refresh protocol pickers app-wide
-    } catch { /* ignore */ }
-  };
-  const loadMarket = async () => {
-    try { setMarket(await invoke<MarketEntry[]>("plugins_marketplace")); } catch { /* ignore */ }
-  };
-  const refreshPlugins = async () => { await Promise.all([loadPlugins(), loadMarket()]); };
-  useEffect(() => { refreshPlugins(); }, []);
-
-  const installPlugin = async () => {
-    try {
-      const dir = await openDialog({ directory: true, title: t("plugins.selectDirTitle") });
-      if (!dir || typeof dir !== "string") return;
-      setPluginBusy(true);
-      const m = await invoke<PluginManifest>("plugins_install", { srcDir: dir });
-      await refreshPlugins();
-      toast(t("plugins.installSuccess", { name: m.name }), "success");
-    } catch (e) {
-      toast(t("plugins.installFailed", { error: String(e) }), "error");
-    } finally { setPluginBusy(false); }
-  };
-
-  const installFromMarket = async (id: string, name: string) => {
-    setPluginBusy(true);
-    try {
-      await invoke<PluginManifest>("plugins_install_market", { id });
-      await refreshPlugins();
-      toast(t("plugins.installSuccess", { name }), "success");
-    } catch (e) {
-      toast(t("plugins.installFailed", { error: String(e) }), "error");
-    } finally { setPluginBusy(false); }
-  };
-
-  const uninstallPlugin = async (id: string, name: string) => {
-    setPluginBusy(true);
-    try {
-      await invoke("plugins_uninstall", { id });
-      await refreshPlugins();
-      toast(t("plugins.uninstallSuccess", { name }), "success");
-    } catch (e) {
-      toast(t("plugins.uninstallFailed", { error: String(e) }), "error");
-    } finally { setPluginBusy(false); }
-  };
+  const [terminalAssetsLoaded, setTerminalAssetsLoaded] = useState(false);
 
   // Load all settings from backend
   useEffect(() => {
@@ -306,11 +249,19 @@ export default function SettingsDialog({ onClose, onApply }: { onClose: () => vo
   }, []);
 
   useEffect(() => {
+    if (section !== "terminal" || terminalAssetsLoaded) {
+      return;
+    }
+    setTerminalAssetsLoaded(true);
     invoke<string[]>("system_fonts").then(setSystemFonts).catch(() => {});
-    invoke<DiscoveredShell[]>("discover_shells").then((shells) => {
-      setDiscoveredShells(shells);
-    }).catch(() => {});
-  }, []);
+    invoke<DiscoveredShell[]>("discover_shells")
+      .then((shells) => {
+        setDiscoveredShells(shells);
+      })
+      .catch(() => {});
+  }, [section, terminalAssetsLoaded]);
+
+
 
   // Sync shellCustom once when discovered shells load (initial state only)
   useEffect(() => {
@@ -421,14 +372,17 @@ export default function SettingsDialog({ onClose, onApply }: { onClose: () => vo
                 onClick={() => setSection(id)}
               >
                 <span className="settings-nav-icon">{SECTION_ICONS[id]}</span>
-                {t(`settings.section.${id}`)}
+                {id === "ai" ? aiLabel("AI 助手", "AI assistant") : id === "keymgr" ? t("keyMgr.title") : id === "highlight" ? t("highlight.title") : t(`settings.section.${id}`)}
               </button>
             ))}
           </nav>
 
           {/* ── Right panel ── */}
-          <div className="settings-panel">
+          <div className={`settings-panel${section === "keymgr" || section === "highlight" ? " settings-panel--tool" : ""}`}>
             {loading && <div className="settings-loading">{t("settings.loading")}</div>}
+            {!loading && section === "ai" && <AiSettings/>}
+            {!loading && section === "keymgr" && <KeyManagerDialog embedded onClose={onClose}/>}
+            {!loading && section === "highlight" && <KeyHighlightDialog embedded onClose={onClose} onChange={onHighlightsChange}/>}
 
             {/* ── Appearance ── */}
             {!loading && section === "appearance" && (<>
@@ -575,10 +529,12 @@ export default function SettingsDialog({ onClose, onApply }: { onClose: () => vo
               {/* Local shell picker */}
               <div className="srow">
                 <span className="slabel">{t("terminal.localShell")}</span>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, width: 220, maxWidth: "65%" }}>
                   <CustomSelect
                     className="sctl"
                     style={{ width: "100%" }}
+                    menuClassName="settings-shell-menu"
+                    portalMenu
                     value={shellCustom ? "__custom__" : (s.localShell || "")}
                     onChange={(v) => {
                       if (v === "__custom__") {
@@ -697,86 +653,11 @@ export default function SettingsDialog({ onClose, onApply }: { onClose: () => vo
             </>)}
 
             {/* ── Plugins ── */}
-            {section === "plugins" && (
-              <div className="plugins-panel">
-                <div className="plugins-tabs">
-                  <button className={`plugins-tab${pluginTab === "market" ? " active" : ""}`}
-                    onClick={() => setPluginTab("market")}>{t("plugins.market")}</button>
-                  <button className={`plugins-tab${pluginTab === "installed" ? " active" : ""}`}
-                    onClick={() => setPluginTab("installed")}>{t("plugins.installed")}{(() => { const n = plugins.filter((p) => pluginSupportedOnPlatform(p.protocol)).length; return n ? ` (${n})` : ""; })()}</button>
-                  <div style={{ flex: 1 }} />
-                  <button className="btn-sm" disabled={pluginBusy} onClick={installPlugin}>{t("plugins.installLocal")}</button>
-                </div>
-
-                {pluginTab === "market" && (
-                  market.filter((p) => pluginSupportedOnPlatform(p.protocol)).length === 0 ? (
-                    <div className="plugins-empty">{t("plugins.marketEmpty")}</div>
-                  ) : (
-                    <div className="plugins-list">
-                      {market.filter((p) => pluginSupportedOnPlatform(p.protocol)).map((p) => (
-                        <div className="plugin-card" key={p.id}>
-                          <div className="plugin-meta">
-                            <span className="plugin-name">{p.name}
-                              <span className="plugin-ver">v{p.version}</span>
-                            </span>
-                            <span className="plugin-sub">
-                              {p.kind}{p.protocol ? ` · ${p.protocol}` : ""}{p.author ? ` · ${p.author}` : ""}
-                            </span>
-                            {p.description && <span className="plugin-desc">{p.description}</span>}
-                          </div>
-                          {p.installed && p.installedVersion === p.version ? (
-                            <button className="btn-sm" disabled>{t("plugins.installedBadge")}</button>
-                          ) : (
-                            <button className="btn-sm btn-primary" disabled={pluginBusy}
-                              onClick={() => installFromMarket(p.id, p.name)}>
-                              {p.installed ? t("plugins.update") : t("plugins.install")}
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )
-                )}
-
-                {pluginTab === "installed" && (
-                  plugins.filter((p) => pluginSupportedOnPlatform(p.protocol)).length === 0 ? (
-                    <div className="plugins-empty">{t("plugins.installedEmpty")}</div>
-                  ) : (
-                    <div className="plugins-list">
-                      {plugins.filter((p) => pluginSupportedOnPlatform(p.protocol)).map((p) => (
-                        <div className="plugin-card" key={p.id}>
-                          <div className="plugin-meta">
-                            <span className="plugin-name">{p.name}
-                              <span className="plugin-ver">v{p.version}</span>
-                            </span>
-                            <span className="plugin-sub">
-                              {p.kind}{p.protocol ? ` · ${p.protocol}` : ""}{p.author ? ` · ${p.author}` : ""}
-                            </span>
-                            {p.description && <span className="plugin-desc">{p.description}</span>}
-                          </div>
-                          <button className="btn-sm" disabled={pluginBusy}
-                            onClick={() => uninstallPlugin(p.id, p.name)}>{t("plugins.uninstall")}</button>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                )}
-              </div>
-            )}
+            {section === "plugins" && <PluginSettings />}
 
             {/* ── About ── */}
             {!loading && section === "about" && (
-              <div className="about-panel">
-                <div className="about-brand">
-                  <img src="/icons/128x128.png" alt="Netape" className="about-logo" draggable={false} />
-                  <div className="about-name">Netape</div>
-                </div>
-                <div className="about-meta">
-                  <span className="about-version">{t("about.version", { version: VERSION })}</span>
-                  <span className="about-meta-sep">·</span>
-                  <span className="about-author">{t("about.author")} bicongming</span>
-                </div>
-              </div>
+              <AboutPanel/>
             )}
 
           </div>

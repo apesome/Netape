@@ -1,0 +1,112 @@
+name: Publish Windows release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: netape-publish
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      RUSTUP_TOOLCHAIN: stable-x86_64-pc-windows-gnu
+      CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: gcc.exe
+      CC_x86_64_pc_windows_gnu: gcc.exe
+      CXX_x86_64_pc_windows_gnu: g++.exe
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc
+      - name: Configure GNU build tools
+        shell: pwsh
+        run: |
+          '${{ steps.msys2.outputs.msys2-location }}\mingw64\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal
+      - name: Validate new app version and signing secret
+        shell: pwsh
+        env:
+          CATALOG_KEY: ${{ secrets.PLUGIN_CATALOG_PRIVATE_KEY }}
+        run: |
+          if (-not $env:CATALOG_KEY) { throw 'Configure PLUGIN_CATALOG_PRIVATE_KEY before publishing.' }
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          gh release view "v$version" --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -eq 0) { throw "v$version already exists. Increment app versions before publishing." }
+          $global:LASTEXITCODE = 0
+      - run: npm ci
+      - name: Test and build installer
+        shell: pwsh
+        run: |
+          node --test tests/*.test.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm run build
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo test --locked -p netape-plugin-package
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm run tauri -- build --target x86_64-pc-windows-gnu --bundles nsis
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Package and sign plugins
+        shell: pwsh
+        env:
+          CATALOG_KEY: ${{ secrets.PLUGIN_CATALOG_PRIVATE_KEY }}
+        run: |
+          $key = Join-Path $env:RUNNER_TEMP 'catalog-key.pem'
+          try {
+            [IO.File]::WriteAllText($key, $env:CATALOG_KEY)
+            node scripts/plugin-release.mjs pack --id ftp --target x86_64-pc-windows-gnu
+            if ($LASTEXITCODE) { throw 'FTP packaging failed' }
+            node scripts/plugin-release.mjs pack --id smb --target x86_64-pc-windows-gnu
+            if ($LASTEXITCODE) { throw 'SMB packaging failed' }
+            node scripts/github-release.mjs --prepare --repository $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE) { throw 'Preparing immutable plugin assets failed' }
+            node scripts/plugin-release.mjs sign --key $key
+            if ($LASTEXITCODE) { throw 'Catalog signing failed' }
+            cargo run --locked -p netape-plugin-package --example verify_release -- config/plugin-market.json plugin-release x86_64-pc-windows-gnu
+            if ($LASTEXITCODE) { throw 'Release verification failed' }
+          } finally {
+            if (Test-Path -LiteralPath $key) { Remove-Item -LiteralPath $key }
+          }
+      - name: Publish immutable release assets
+        shell: pwsh
+        run: node scripts/github-release.mjs --repository $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-release
+          path: |
+            target/x86_64-pc-windows-gnu/release/bundle/nsis/*.exe
+            plugin-release/
+          if-no-files-found: ignore
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: plugin-release/site
+  deploy-catalog:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy signed plugin catalog
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,8 +1,5 @@
 //! Typed setting facades over the raw key-value store.
 //!
-//! Port of `DatabaseManager.IProperties` and its concrete subclasses
-//! (`Terminal`, `Appearance`, `SFTP`, `Properties`).
-//!
 //! Each [`Settings`] instance is a thin namespace view over the `settings`
 //! table — keys are stored as `"<namespace>.<key>"`.
 
@@ -81,7 +78,6 @@ impl<'a> Settings<'a> {
 // ---------------------------------------------------------------------------
 
 /// Terminal display settings.
-///
 pub struct TerminalSettings<'a>(pub Settings<'a>);
 
 impl<'a> TerminalSettings<'a> {
@@ -145,8 +141,6 @@ impl<'a> TerminalSettings<'a> {
 }
 
 /// Appearance (theme, language, …) settings.
-///
-/// Port of `DatabaseManager.Appearance`.
 pub struct AppearanceSettings<'a>(pub Settings<'a>);
 
 impl<'a> AppearanceSettings<'a> {
@@ -198,8 +192,6 @@ impl<'a> AppearanceSettings<'a> {
 }
 
 /// SFTP settings.
-///
-/// Port of `DatabaseManager.SFTP`.
 pub struct SftpSettings<'a>(pub Settings<'a>);
 
 impl<'a> SftpSettings<'a> {

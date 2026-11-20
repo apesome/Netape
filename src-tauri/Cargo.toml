@@ -9,8 +9,13 @@ description = "Netape - cross-platform terminal and SSH client built with Rust a
 name = "netape_lib"
 crate-type = ["rlib"]
 
+[features]
+# Embed dist when launched directly with cargo run, including debug builds.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2", features = ["codegen"] }
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
@@ -30,6 +35,8 @@ netape-terminal = { path = "../crates/netape-terminal" }
 netape-protocol = { path = "../crates/netape-protocol" }
 netape-store    = { path = "../crates/netape-store" }
 netape-domain   = { path = "../crates/netape-domain" }
+netape-plugin-package = { path = "../crates/netape-plugin-package" }
+tempfile = "3"
 
 tokio   = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "io-util"] }
 futures.workspace = true
@@ -37,6 +44,10 @@ uuid.workspace = true
 dirs = "5"
 russh-sftp = { version = "2", default-features = false }
 png = "0.17"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
+sha2 = "0.11"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [target.'cfg(windows)'.dependencies]
 raw-window-handle = "0.6"

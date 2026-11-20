@@ -1,8 +1,5 @@
 //! Proxy TCP-stream factory.
 //!
-//! Port of `SshClients.MyIoConnector.getClientProxyConnector` (HTTP CONNECT /
-//! SOCKS5 via JGit's `HttpClientConnector` / `Socks5ClientConnector`).
-//!
 //! Returns a `TcpStream` that is already connected through the proxy, so the
 //! SSH handshake runs on top of it transparently.
 

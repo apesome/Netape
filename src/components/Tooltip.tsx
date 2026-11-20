@@ -51,6 +51,7 @@ export default function GlobalTooltip() {
 
     const onEnter = (e: MouseEvent) => {
       if (inCooldownRef.current) return;
+      if (!(e.target instanceof Element)) return;
       const el = (e.target as Element).closest("[data-tooltip]") as HTMLElement | null;
       if (!el) return;
       const text = el.dataset.tooltip;
@@ -72,6 +73,7 @@ export default function GlobalTooltip() {
     };
 
     const onLeave = (e: MouseEvent) => {
+      if (!(e.target instanceof Element)) return;
       const el = (e.target as Element).closest("[data-tooltip]");
       if (!el) return;
       clearTimeout(showTimerRef.current);
@@ -105,7 +107,7 @@ export default function GlobalTooltip() {
   return createPortal(
     <div
       ref={tipDivRef}
-      className="g-tooltip"
+      className={`g-tooltip${tip.text.includes("\n") ? " g-tooltip--multiline" : ""}`}
       style={{
         left: tip.x,
         top:  tip.y,

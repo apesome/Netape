@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Host } from "../types";
 import { getProtocol } from "../protocols";
 import { useT } from "../i18n";
+import { useRecentHosts } from "../store/recentHosts";
 
 /** "New host" card icon — a window with a plus badge. */
 const NewHostIcon = () => (
@@ -61,12 +62,14 @@ export default function NewTerminalDialog({
   const t = useT();
   const [filter, setFilter] = useState("");
   const lf = filter.trim().toLowerCase();
+  const recent = useRecentHosts();
+  const rank = new Map(recent.map((id, index) => [id, index]));
 
-  // Terminal-capable hosts (exclude folders), sorted by name.
+  // Recently opened hosts first, then hosts without history in name order.
   const list = hosts
     .filter((h) => !h.deleted && h.protocol !== "Folder")
     .filter((h) => !lf || h.name.toLowerCase().includes(lf) || (h.host || "").toLowerCase().includes(lf) || (h.username || "").toLowerCase().includes(lf))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity) || a.name.localeCompare(b.name));
 
   return (
     <div className="dialog-overlay" onClick={onClose}>

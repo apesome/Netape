@@ -49,6 +49,16 @@ fn discover_impl() -> Vec<DiscoveredShell> {
 // ── Windows ────────────────────────────────────────────────────────────────
 
 #[cfg(windows)]
+fn hidden_command(program: &str) -> std::process::Command {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let mut cmd = std::process::Command::new(program);
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd
+}
+
+#[cfg(windows)]
 fn discover_windows() -> Vec<DiscoveredShell> {
     let mut shells: Vec<DiscoveredShell> = Vec::new();
 
@@ -84,10 +94,7 @@ fn discover_windows() -> Vec<DiscoveredShell> {
 /// Run `where.exe <name>`, return first real path (skipping WindowsApps aliases).
 #[cfg(windows)]
 fn find_on_path(name: &str) -> Option<String> {
-    let out = std::process::Command::new("where.exe")
-        .arg(name)
-        .output()
-        .ok()?;
+    let out = hidden_command("where.exe").arg(name).output().ok()?;
     if !out.status.success() {
         return None;
     }
@@ -110,7 +117,7 @@ fn reg_query(key: &str, value_name: &str) -> Option<String> {
     } else {
         &["query", key, "/v", value_name]
     };
-    let out = std::process::Command::new("reg").args(args).output().ok()?;
+    let out = hidden_command("reg").args(args).output().ok()?;
     if !out.status.success() {
         return None;
     }
@@ -191,10 +198,7 @@ fn detect_wsl() -> Vec<DiscoveredShell> {
     if !std::path::Path::new(&wsl_exe).exists() {
         return vec![];
     }
-    let Ok(out) = std::process::Command::new(&wsl_exe)
-        .args(["-l", "-q"])
-        .output()
-    else {
+    let Ok(out) = hidden_command(&wsl_exe).args(["-l", "-q"]).output() else {
         return vec![];
     };
 

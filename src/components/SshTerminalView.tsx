@@ -1,3 +1,4 @@
+import { terminalInput, terminalText, type TerminalApi } from "../ai";
 import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -7,6 +8,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
 import type { TerminalSettings, KeywordHighlight } from "../types";
 import { t as i18nT, useT } from "../i18n";
+import { commandFromPrompt, directoryAfterCd } from "../terminalCwd";
 
 const TERM_THEME_DARK = {
   background: "#1e2230", foreground: "#cdd6f4", cursor: "#89b4fa", cursorAccent: "#1e2230",
@@ -31,11 +33,12 @@ interface Props {
   sessionId: string | undefined;
   settings?: TerminalSettings;
   highlights?: KeywordHighlight[];
-  onRegister?: (api: { write: (data: string) => void }) => void;
+  onRegister?: (api: TerminalApi) => void;
   onCwdChange?: (cwd: string) => void;
   uiTheme?: "dark" | "light";
   /** Backend transport: selects event names + write/resize commands. */
   transport?: "ssh" | "telnet";
+  statsBarVisible?: boolean;
   /** Fired when the session ends (the backend emits the exit event). */
   onDisconnect?: () => void;
   /** Called when Ctrl+F is pressed inside the terminal. */
@@ -102,6 +105,7 @@ export default function SshTerminalView({
   onCwdChange,
   uiTheme = "dark",
   transport = "ssh",
+  statsBarVisible = false,
   onDisconnect,
   onToggleSearch,
   onRegisterFind,
@@ -116,6 +120,12 @@ export default function SshTerminalView({
   const highlightsRef = useRef(highlights);
   const onDisconnectRef = useRef(onDisconnect);
   onDisconnectRef.current = onDisconnect;
+  const onCwdChangeRef = useRef(onCwdChange);
+  onCwdChangeRef.current = onCwdChange;
+  const cwdRef = useRef("");
+  const homeDirRef = useRef("");
+  const previousCwdRef = useRef("");
+  const pendingCdRef = useRef<{ cwd: string; previous: string } | null>(null);
 
   // Stable refs so Effect 1 closures always read latest values
   const sessionIdRef    = useRef(sessionId);
@@ -186,6 +196,7 @@ export default function SshTerminalView({
       "block" | "bar" | "underline";
 
     const term = new Terminal({
+      lineHeight: 1.2,
       fontFamily: font,
       fontSize,
       cursorBlink: settings?.cursorBlink ?? true,
@@ -203,7 +214,10 @@ export default function SshTerminalView({
       if (m) {
         try {
           const path = decodeURIComponent(m[1]).replace(/\/*$/, "") || "/";
-          onCwdChange?.(path);
+          previousCwdRef.current = cwdRef.current;
+          cwdRef.current = path;
+          pendingCdRef.current = null;
+          onCwdChangeRef.current?.(path);
         } catch { /* ignore */ }
       }
       return true;
@@ -213,13 +227,31 @@ export default function SshTerminalView({
     let inputDirty = false;
     const inputSub = term.onData((data) => {
       if (data === "\r") {
-        if (!inputDirty) {
-          const m = inputBuf.trim().match(/(?:^|[;&|])\s*cd\s+(\/\S*)/);
-          if (m) onCwdChange?.(m[1].replace(/\/+$/, "") || "/");
+        if (term.buffer.active.type === "alternate") {
+          inputBuf = "";
+          inputDirty = false;
+          return;
+        }
+        // Readline's rendered line contains Tab completion/history/cursor edits.
+        const buffer = term.buffer.active;
+        let row = buffer.baseY + buffer.cursorY;
+        let line = buffer.getLine(row)?.translateToString(false, 0, buffer.cursorX) ?? "";
+        while (row > 0 && buffer.getLine(row)?.isWrapped) {
+          row--;
+          line = (buffer.getLine(row)?.translateToString(false) ?? "") + line;
+        }
+        const command = commandFromPrompt(line) ?? (!inputDirty ? inputBuf : "");
+        pendingCdRef.current = null;
+        const path = directoryAfterCd(command, cwdRef.current, homeDirRef.current, previousCwdRef.current);
+        if (path) {
+          pendingCdRef.current = { cwd: cwdRef.current, previous: previousCwdRef.current };
+          previousCwdRef.current = cwdRef.current;
+          cwdRef.current = path;
+          onCwdChangeRef.current?.(path);
         }
         inputBuf = "";
         inputDirty = false;
-      } else if (data.startsWith("\x1b")) {
+      } else if (data.startsWith("\x1b") || data === "\t") {
         inputDirty = true;
       } else if (data === "\x7f" || data === "\x08") {
         if (!inputDirty) inputBuf = inputBuf.slice(0, -1);
@@ -278,7 +310,26 @@ export default function SshTerminalView({
       return true;
     });
 
-    onRegister?.({ write: (data: string) => term.write(data) });
+    onRegister?.({
+      write: (data: string) => term.write(data),
+      getSelection: () => term.getSelection(),
+      getOutput: lines => terminalText(term, lines),
+      execute: async text => {
+        const sid=sessionIdRef.current;
+        if (!sid) throw Error("Terminal is disconnected");
+        if (term.buffer.active.type === "alternate") throw Error("Leave the fullscreen terminal program before running commands");
+        const data=terminalInput(text,term.modes.bracketedPasteMode,true);
+        await invoke(`${transportRef.current}_write`,{sessionId:sid,data});term.focus();
+      },
+      paste: async text => {
+        // Bracketed paste prevents multiline text from executing as keystrokes.
+        const data=terminalInput(text,term.modes.bracketedPasteMode);
+        const sid=sessionIdRef.current;
+        if (!sid) throw Error("Terminal is disconnected");
+        await invoke(`${transportRef.current}_write`, {sessionId:sid,data});
+        term.focus();
+      },
+    });
 
     // User keystrokes → SSH/telnet write (uses refs so sessionId can change)
     const dataSub = term.onData((data) => {
@@ -346,6 +397,12 @@ export default function SshTerminalView({
   useEffect(() => {
     if (!sessionId) return;
 
+    cwdRef.current = "";
+    previousCwdRef.current = "";
+    homeDirRef.current = "";
+    pendingCdRef.current = null;
+    onCwdChangeRef.current?.("");
+
     // New session → no longer in disconnected state
     setIsDisconnected(false);
     isDisconnectedRef.current = false;
@@ -356,12 +413,30 @@ export default function SshTerminalView({
     let unlistenExit: UnlistenFn | undefined;
     let cancelled = false;
 
+    if (transport === "ssh") {
+      // A separate exec starts at HOME; use it only to establish the base path.
+      invoke<string>("ssh_get_cwd", { sessionId }).then(home => {
+        if (cancelled) return;
+        homeDirRef.current = home;
+        if (!cwdRef.current) {
+          cwdRef.current = home;
+          onCwdChangeRef.current?.(home);
+        }
+      }).catch(() => {});
+    }
+
     (async () => {
       unlistenOutput = await listen<string>(outEvent, (event) => {
         const term = termRef.current;
         if (!term) return;
         const bytes = base64ToBytes(event.payload);
         const text = new TextDecoder().decode(bytes);
+        if (pendingCdRef.current && /(?:^|[\r\n])[^\r\n]*\bcd:/.test(text)) {
+          cwdRef.current = pendingCdRef.current.cwd;
+          previousCwdRef.current = pendingCdRef.current.previous;
+          pendingCdRef.current = null;
+          onCwdChangeRef.current?.(cwdRef.current);
+        }
         const h = highlightsRef.current;
         if (h.length) {
           term.write(applyHighlights(text, h));
@@ -417,7 +492,7 @@ export default function SshTerminalView({
   return (
     <div
       className="terminal-wrapper"
-      style={{ paddingTop: 24 }}
+      style={{ paddingTop: statsBarVisible ? 24 : 0 }}
       onMouseDown={(e) => {
         if (ctxMenu && !(e.target as HTMLElement).closest(".ctx-menu")) {
           closeCtx();

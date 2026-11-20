@@ -22,8 +22,8 @@ mod win {
     use winapi::{
         shared::windef::HWND,
         um::winuser::{
-            GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW,
-            GWL_EXSTYLE, LWA_ALPHA, WS_EX_LAYERED,
+            GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW, GWL_EXSTYLE,
+            LWA_ALPHA, WS_EX_LAYERED,
         },
     };
 
@@ -50,6 +50,37 @@ mod win {
                 SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex & !(WS_EX_LAYERED as isize));
             }
         }
+        Ok(())
+    }
+}
+
+/// Restore and show the main window once WebView initialization is complete.
+#[tauri::command]
+pub fn window_restore_state(window: tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use tauri::Manager;
+        let legacy_maximized = window
+            .state::<crate::app_state::AppState>()
+            .store
+            .get_setting("app.wasMaximized")
+            .ok()
+            .flatten()
+            .as_deref()
+            == Some("true");
+        crate::window_state::restore(&window, legacy_maximized)
+    }
+    #[cfg(not(windows))]
+    window.show().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn window_save_state(window: tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(windows)]
+    return crate::window_state::save(&window);
+    #[cfg(not(windows))]
+    {
+        let _ = window;
         Ok(())
     }
 }
