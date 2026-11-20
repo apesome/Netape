@@ -23,7 +23,7 @@ jobs:
     permissions:
       contents: write
     env:
-      RUSTUP_TOOLCHAIN: stable-x86_64-pc-windows-gnu
+      RUSTUP_TOOLCHAIN: 1.95.0-x86_64-pc-windows-gnu
       CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: gcc.exe
       CC_x86_64_pc_windows_gnu: gcc.exe
       CXX_x86_64_pc_windows_gnu: g++.exe
@@ -44,7 +44,12 @@ jobs:
         shell: pwsh
         run: |
           '${{ steps.msys2.outputs.msys2-location }}\mingw64\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-          rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal
+          rustup toolchain install 1.95.0-x86_64-pc-windows-gnu --profile minimal
+          rustc --version
+          cargo --version
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-gnu-1.95
       - name: Validate new app version and signing secret
         shell: pwsh
         env:

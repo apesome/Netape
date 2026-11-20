@@ -1,6 +1,6 @@
 # GitHub 创建、打包与发布
 
-仓库：<https://github.com/apesome/Netape>。主程序、FTP、SMB 同仓库维护，独立版本发布。当前自动打包目标为 Windows x64 GNU；macOS、Linux 不会生成未经验证的安装包。
+仓库：<https://github.com/apesome/Netape>。主程序、FTP、SMB 同仓库维护，独立版本发布。当前自动打包目标为 Windows x64 GNU；macOS、Linux 不会生成未经验证的安装包。CI 固定使用本机已验证的 Rust `1.95.0`，避免新版 Cargo 构建目录变化影响当前 Tauri 构建依赖；升级工具链时先运行仅构建验证。
 
 ## 首次配置
 
