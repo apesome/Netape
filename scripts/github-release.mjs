@@ -24,6 +24,13 @@ const release = tag => {
   return result === null ? null : JSON.parse(result);
 };
 const manifest = id => read(join(root, `crates/netape-${id}/plugin.json`));
+function removeTemporary(directory) {
+  const target = resolve(directory);
+  if (dirname(target) !== resolve(tmpdir()) || !/^netape-(release|readback)-/.test(basename(target))) {
+    throw new Error('Refusing to remove a directory outside the publisher temporary folder');
+  }
+  rmSync(target, { recursive: true, force: true });
+}
 const indexPath = join(output, 'index.json');
 const index = read(indexPath);
 
@@ -48,7 +55,7 @@ if (args.includes('--prepare')) {
         platform.sha256 = digest;
         platform.size = readFileSync(archive).length;
         console.log(`Reused published ${published.tag_name}/${name}`);
-      } finally { rmSync(temporary, { recursive: true, force: true }); }
+      } finally { removeTemporary(temporary); }
     }
   }
   writeFileSync(indexPath, JSON.stringify(index, null, 2) + '\n');
@@ -60,7 +67,9 @@ const target = option('target', spawnSync('git', ['rev-parse', 'HEAD'], { cwd: r
 if (!/^[a-f0-9]{40}$/.test(target)) throw new Error('Provide a full source commit SHA with --target');
 const pkg = read(join(root, 'package.json'));
 const tauri = read(join(root, 'src-tauri/tauri.conf.json'));
-if (pkg.version !== tauri.version || !/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(pkg.version)) throw new Error('Application versions must match');
+const workspacePackage = readFileSync(join(root, 'Cargo.toml'), 'utf8').match(/\[workspace\.package\]([\s\S]*?)(?=\n\[|$)/)?.[1];
+const rustVersion = workspacePackage?.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+if (pkg.version !== tauri.version || pkg.version !== rustVersion || !/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(pkg.version)) throw new Error('Application versions must match in package.json, Cargo.toml and tauri.conf.json');
 const trust = read(join(root, 'config/plugin-market.json'));
 const signature = read(`${indexPath}.sig`);
 const publicHex = trust.keys[signature.keyId];
@@ -107,7 +116,7 @@ for (const plan of plans) {
         gh(['release', 'download', plan.tag, '--repo', repository, '--pattern', basename(path), '--dir', temporary]);
         if (hash(path) !== hash(join(temporary, basename(path)))) throw new Error(`Existing asset differs: ${basename(path)}`);
       }
-    } finally { rmSync(temporary, { recursive: true, force: true }); }
+    } finally { removeTemporary(temporary); }
     console.log(`Verified existing immutable release ${plan.tag}`);
     continue;
   }

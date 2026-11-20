@@ -10,7 +10,7 @@
 
 ## 之后发布新版本
 
-1. 同步更新根 `Cargo.toml`、`package.json`、`package-lock.json` 和 `src-tauri/tauri.conf.json` 的应用版本。
+1. 同步更新根 `Cargo.toml`、`package.json`、`package-lock.json`、`Cargo.lock` 和 `src-tauri/tauri.conf.json` 的应用版本。构建检查通过后提交，发布脚本会核对应用版本是否一致。
 2. 修改了插件时，同步更新对应 crate 的 `Cargo.toml` 与 `plugin.json`。未修改的插件继续使用已经发布的原始包。
 3. 推送源码到 `main`，打开 **Actions → Publish Windows release → Run workflow**。默认勾选 `publish`；取消勾选时仅验证构建并保存 artifacts，不创建 Release 或部署 Pages。
 
