@@ -12,7 +12,7 @@
 
 1. 同步更新根 `Cargo.toml`、`package.json`、`package-lock.json` 和 `src-tauri/tauri.conf.json` 的应用版本。
 2. 修改了插件时，同步更新对应 crate 的 `Cargo.toml` 与 `plugin.json`。未修改的插件继续使用已经发布的原始包。
-3. 推送源码到 `main`，打开 **Actions → Publish Windows release → Run workflow**。
+3. 推送源码到 `main`，打开 **Actions → Publish Windows release → Run workflow**。默认勾选 `publish`；取消勾选时仅验证构建并保存 artifacts，不创建 Release 或部署 Pages。
 
 工作流执行测试、构建 NSIS 安装包、打包 FTP/SMB、复用相同插件版本的已发布文件、签名并校验索引，再发布：
 

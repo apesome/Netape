@@ -2,6 +2,11 @@ name: Publish Windows release
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish Releases and deploy the catalog (disable for build verification only)
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -46,9 +51,11 @@ jobs:
           CATALOG_KEY: ${{ secrets.PLUGIN_CATALOG_PRIVATE_KEY }}
         run: |
           if (-not $env:CATALOG_KEY) { throw 'Configure PLUGIN_CATALOG_PRIVATE_KEY before publishing.' }
-          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          gh release view "v$version" --repo $env:GITHUB_REPOSITORY 2>$null
-          if ($LASTEXITCODE -eq 0) { throw "v$version already exists. Increment app versions before publishing." }
+          if ('${{ inputs.publish }}' -eq 'true') {
+            $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+            gh release view "v$version" --repo $env:GITHUB_REPOSITORY 2>$null
+            if ($LASTEXITCODE -eq 0) { throw "v$version already exists. Increment app versions before publishing." }
+          }
           $global:LASTEXITCODE = 0
       - run: npm ci
       - name: Test and build installer
@@ -84,6 +91,7 @@ jobs:
             if (Test-Path -LiteralPath $key) { Remove-Item -LiteralPath $key }
           }
       - name: Publish immutable release assets
+        if: inputs.publish
         shell: pwsh
         run: node scripts/github-release.mjs --repository $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA
       - uses: actions/upload-artifact@v4
@@ -95,10 +103,12 @@ jobs:
             plugin-release/
           if-no-files-found: ignore
       - uses: actions/upload-pages-artifact@v3
+        if: inputs.publish
         with:
           path: plugin-release/site
   deploy-catalog:
     needs: build
+    if: inputs.publish
     runs-on: ubuntu-latest
     permissions:
       pages: write
