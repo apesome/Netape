@@ -1,0 +1,105 @@
+name: Publish macOS and Linux release
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Append packages to the existing app release and deploy the signed catalog
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: netape-publish
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            bundles: dmg
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            bundles: deb,appimage
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      RUSTUP_TOOLCHAIN: 1.95.0
+      APPIMAGE_EXTRACT_AND_RUN: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev libdbus-1-dev patchelf
+      - name: Install Rust
+        run: rustup toolchain install 1.95.0 --profile minimal --target '${{ matrix.target }}'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: unix-${{ matrix.target }}-1.95
+      - run: npm ci
+      - name: Test release tooling
+        run: |
+          node --test tests/*.test.mjs
+          cargo test --locked -p netape-plugin-package
+      - name: Build native installer
+        run: npm run tauri -- build --target '${{ matrix.target }}' --bundles '${{ matrix.bundles }}'
+      - name: Package FTP plugin
+        run: node scripts/plugin-release.mjs pack --id ftp --target '${{ matrix.target }}' --out plugin-release/unix/${{ matrix.target }}/plugins
+      - name: Stage installers and checksums
+        run: node scripts/unix-release.mjs stage '${{ matrix.target }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unix-${{ matrix.target }}
+          path: plugin-release/unix/${{ matrix.target }}/
+          if-no-files-found: error
+          retention-days: 14
+  publish:
+    needs: build
+    if: inputs.publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: unix-*
+          path: plugin-release/unix
+      - name: Publish verified platform packages and signed catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLUGIN_CATALOG_PRIVATE_KEY: ${{ secrets.PLUGIN_CATALOG_PRIVATE_KEY }}
+        run: node scripts/unix-release.mjs publish
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: plugin-release/site
+      - name: Deploy merged plugin catalog
+        id: deployment
+        uses: actions/deploy-pages@v4
