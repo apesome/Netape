@@ -98,7 +98,7 @@ if (command === 'keygen') {
   const index=existsSync(indexPath)?read(indexPath):{schemaVersion:1,generatedAt:timestamp,expiresAt:timestamp+60*86400,plugins:[]};
   let item=index.plugins.find(value=>value.id===id);
   if(item&&item.version!==manifest.version) { index.plugins=index.plugins.filter(value=>value.id!==id); item=null; }
-  if(!item) { item={...manifest,minAppVersion:'0.1.0',platforms:{}}; index.plugins.push(item); }
+  if(!item) { item={...manifest,minAppVersion:'1.0.0',platforms:{}}; index.plugins.push(item); }
   item.platforms[target]={url:`https://github.com/${repository}/releases/download/plugin-${id}-v${manifest.version}/${filename}`,archive:format,size:bytes.length,sha256};
   index.generatedAt=timestamp; index.expiresAt=timestamp+60*86400; save(indexPath,index);
   writeFileSync(join(out,`${filename}.sha256`),`${sha256}  ${filename}\n`);

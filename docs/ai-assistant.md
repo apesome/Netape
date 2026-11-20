@@ -58,7 +58,7 @@ Optional-model validation: browser fixtures saved a service without a model ID, 
 
 ## Model icons and usage
 
-AI assistant is the product name throughout the UI. Model icons are bundled locally for every selectable provider and recognized model families; model IDs take precedence over gateway brands. The applicable MIT copyright and license notice is in [licenses/EchoBird-MIT.txt](../licenses/EchoBird-MIT.txt).
+AI assistant is the product name throughout the UI. Model icons are bundled locally for every selectable provider and recognized model families; model IDs take precedence over gateway brands. The applicable MIT copyright and license notice is in [licenses/THIRD_PARTY_NOTICES.txt](../licenses/THIRD_PARTY_NOTICES.txt).
 
 Saved-service cards and the assistant composer offer an expandable Usage & balance view. Opening it queries the saved service using its OS-vault API key; refresh is explicit, with a throttled refresh after a chat while expanded. Adapters from EchoBird cover DeepSeek, Kimi Coding, Moonshot, MiniMax, Novita, OpenCode, OpenRouter, SiliconFlow, StepFun and Zhipu. Query availability depends on the service region, plan and key permissions; SiliconFlow domestic querying is retired in the source implementation. Other services, relay presets and providers requiring login sessions or separate AK/SK are not queried. No balance or percentage is estimated. OpenRouter inference keys expose their spending limit when configured, rather than account-level management credit.
 

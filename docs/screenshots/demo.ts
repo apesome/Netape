@@ -107,7 +107,7 @@ mockIPC(async (cmd, args: any = {}) => {
   if (cmd === "local_list_drives") return ["C:/"];
   if (cmd === "local_list_dir" || cmd === "sftp_list_dir") return files(args.path);
   if (["highlight_list", "key_list", "note_list", "terminal_list_shells", "shell_list", "system_fonts", "discover_shells"].includes(cmd)) return [];
-  if (cmd === "plugin:app|version") return "0.1.0";
+  if (cmd === "plugin:app|version") return "1.0.0";
   if (cmd === "plugin:window|is_maximized" || cmd === "plugin:window|is_fullscreen") return false;
   if (cmd === "plugin:window|inner_size") return { width: 1440, height: 900 };
   if (cmd === "plugin:window|scale_factor") return 1;
