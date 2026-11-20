@@ -71,7 +71,7 @@ Pakete liegen unter `target/release/bundle/`; Rust verwendet je nach Toolchain/T
 
 Der Marktplatz unterstützt einen signierten HTTPS-Katalog, plattformspezifische Downloads, Fortschritt, Abbruch und geprüfte Installation. Lokale Installation bleibt verfügbar. Plugins bestehen aus `plugin.json` und einem separaten Programm mit JSON-RPC; SMB ist Windows vorbehalten.
 
-Die [Veröffentlichungsanleitung](docs/plugin-distribution.md) beschreibt Releases, Signaturschlüssel und Paketskripte. Öffentliche Pakete und der signierte Katalog müssen vor der Online-Installation veröffentlicht werden. Plugins bleiben vorerst mit eigenen Versionen im selben Repository.
+FTP- und SMB-Pakete für Windows x64 und der [signierte Katalog](https://apesome.github.io/Netape/plugins/v1/index.json) sind veröffentlicht. Die [Plugin-Anleitung](docs/plugin-distribution.md) beschreibt Signaturen und Pakete; die [GitHub-Anleitung](docs/github-release.md) erklärt manuelle und automatische Releases. Plugins bleiben vorerst mit eigenen Versionen im selben Repository.
 
 Fehlerberichte bitte mit Betriebssystem, App-Version, Schritten zur Reproduktion und bereinigten Logs in [Issues](https://github.com/apesome/Netape/issues) einreichen. Keine Zugangsdaten oder privaten Schlüssel veröffentlichen.
 

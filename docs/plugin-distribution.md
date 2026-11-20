@@ -2,7 +2,7 @@
 
 [中文 README](../README.zh-CN.md) · [English README](../README.md)
 
-客户端已支持签名 HTTPS 索引、按 Rust target 选择包、下载进度与取消、SHA-256 校验、安全解压、暂存替换及离线缓存。本地安装继续保留。**客户端能力不等于发布服务已经上线**：首次使用在线市场前，需将真实插件包上传到 Releases，并发布签名索引。
+客户端已支持签名 HTTPS 索引、按 Rust target 选择包、下载进度与取消、SHA-256 校验、安全解压、暂存替换及离线缓存。本地安装继续保留。Windows x64 GNU 的 FTP `1.1.0`、SMB `1.0.0` 已上传至 [Releases](https://github.com/apesome/Netape/releases)，签名索引已部署至 GitHub Pages。
 
 ## 是否拆仓库
 
@@ -21,7 +21,7 @@
 | `scripts/plugin-release.mjs` | 生成密钥、打包、计算摘要、生成并签名索引 |
 | `crates/netape-ftp/plugin.json`、`crates/netape-smb/plugin.json` | 随源码追踪的发布清单 |
 
-默认索引：`https://apesome.github.io/Netape/plugins/v1/index.json`；签名文件在同地址追加 `.sig`。这是配置的发布地址，没有自动创建 GitHub Pages 或 Release。市场合并在线条目、本地目录和已安装版本，显示来源、版本和兼容状态，不向低版本提供“更新”。在线失败时明确提示，并使用仍在有效期内、验签通过的缓存。
+默认索引：`https://apesome.github.io/Netape/plugins/v1/index.json`；签名文件在同地址追加 `.sig`。公开仓库与 Pages 已配置，后续通过 Actions 发布。市场合并在线条目、本地目录和已安装版本，显示来源、版本和兼容状态，不向低版本提供“更新”。在线失败时明确提示，并使用仍在有效期内、验签通过的缓存。
 
 本地目录查找顺序仍为 `NETAPE_PLUGIN_CATALOG` → 可执行文件旁 `plugins-dist/` → 源码根目录 `plugins-dist/`。安装位置：`~/.netape/plugins/<id>/`。SFTP 内置；FTP 为插件；SMB 当前只支持 Windows。
 
@@ -70,6 +70,12 @@ plugin-release/
 cargo run -p netape-plugin-package --example verify_release -- config/plugin-market.json plugin-release x86_64-pc-windows-msvc
 ```
 
+验证真实线上目录与下载包（暂存到临时目录，不执行插件、不修改用户安装）：
+
+```bash
+cargo run -p netape-plugin-package --example verify_online -- config/plugin-market.json x86_64-pc-windows-gnu
+```
+
 ## GitHub 发布顺序
 
 1. 在目标平台测试插件连接、浏览、传输、关闭。安装器测试不代替真实协议测试。
@@ -92,6 +98,6 @@ cargo run -p netape-plugin-package --example verify_release -- config/plugin-mar
 
 ## English summary
 
-Netape supports a signed HTTPS catalog, exact Rust-target selection, bounded downloads with progress/cancellation, SHA-256 verification, safe ZIP/tar.gz extraction, staged replacement, rollback and verified offline cache. Local installation remains available. Public artifacts and the Pages catalog still need publishing; the client does not create a live distribution service.
+Netape supports a signed HTTPS catalog, exact Rust-target selection, bounded downloads with progress/cancellation, SHA-256 verification, safe ZIP/tar.gz extraction, staged replacement, rollback and verified offline cache. Local installation remains available. Windows x64 GNU packages and the signed GitHub Pages catalog are published. See [GitHub releases](github-release.md) for the repeatable build and publication workflow.
 
 Keep FTP/SMB in this repository for now, with independent versions and release tags. Their stdio JSON-RPC boundary permits a later move to `netape-plugins` without changing client trust/index configuration. Use the publishing script above to build archives, collect notices, merge targets and sign exact catalog bytes. The private key stays outside the repository; only its public key is embedded. Publish tested archives and matching AGPL source first, then deploy the signed index.

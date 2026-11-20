@@ -93,7 +93,7 @@ The marketplace supports a **signed HTTPS catalog** and target-specific download
 
 For development, `NETAPE_PLUGIN_CATALOG` points to a local catalog with one subfolder per plugin. The app also looks for `plugins-dist/` beside its executable, then in the source tree. This folder is ignored by Git and is not automatically included in an installer.
 
-The [publishing guide](docs/plugin-distribution.md) covers GitHub Releases, signing keys, package scripts and catalog deployment. Public packages and the signed catalog must be published before online installation becomes available. FTP and SMB remain in this repository with independent versions; a separate plugin repository is optional later.
+Windows x64 FTP and SMB packages and the [signed catalog](https://apesome.github.io/Netape/plugins/v1/index.json) are published. The [plugin guide](docs/plugin-distribution.md) explains signing and packaging; the [GitHub release guide](docs/github-release.md) covers manual and automated releases. FTP and SMB remain in this repository with independent versions.
 
 ## Project layout
 

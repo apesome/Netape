@@ -93,7 +93,7 @@ cargo +stable-x86_64-pc-windows-gnu run
 
 开发时可通过 `NETAPE_PLUGIN_CATALOG` 指定本地插件目录，每个插件一个子目录。程序还会依次查找可执行文件旁和源码根目录中的 `plugins-dist/`。该目录被 Git 忽略，现有桌面打包配置也不会自动携带其内容。
 
-详见[插件发布指南](docs/plugin-distribution.md)，包含 GitHub Releases、签名密钥、打包脚本与索引部署。需先发布真实安装包及签名索引，用户才能在线安装。FTP、SMB 暂时同仓库维护、独立版本发布，以后可迁入独立插件仓库。
+Windows x64 的 FTP、SMB 插件包与[签名索引](https://apesome.github.io/Netape/plugins/v1/index.json)已上线，可在设置中在线安装。详见[插件发布指南](docs/plugin-distribution.md)和 [GitHub 打包发布指南](docs/github-release.md)。FTP、SMB 暂时同仓库维护、独立版本发布，以后可迁入独立插件仓库。
 
 ## 项目结构
 

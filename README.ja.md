@@ -71,7 +71,7 @@ node --test tests/*.test.mjs
 
 署名付き HTTPS 一覧、環境別ダウンロード、進捗、キャンセル、検証付きインストールに対応しました。ローカルからの追加も利用できます。プラグインは `plugin.json` と JSON-RPC で通信する独立した実行ファイルで構成され、SMB は Windows 専用です。
 
-[公開手順](docs/plugin-distribution.md)に Releases、署名鍵、パッケージ作成コマンドをまとめています。利用前に実際のパッケージと署名付き一覧の公開が必要です。当面は同じリポジトリ内でプラグインごとにバージョン管理します。
+Windows x64 向けの FTP・SMB パッケージと[署名付き一覧](https://apesome.github.io/Netape/plugins/v1/index.json)を公開しています。[プラグイン公開手順](docs/plugin-distribution.md)と [GitHub リリース手順](docs/github-release.md)をご覧ください。当面は同じリポジトリ内でプラグインごとにバージョン管理します。
 
 [Issues](https://github.com/apesome/Netape/issues)には OS、アプリのバージョン、再現手順、機密情報を除いたログを添えてください。パスワードや秘密鍵は投稿しないでください。
 
